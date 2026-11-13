@@ -121,10 +121,13 @@ async function main() {
   for (let i = 0; i < 6; i++) { await page.keyboard.press('Space'); await sleep(330); }
   const fl = await S(() => ({ y: window.__t.body.y, air: window.__t.air, vx: window.__t.body.vx, st: window.__t.flight.stamina }));
   check('takes off and climbs', fl.air && fl.y < y0 - 40, `subiu ${Math.round(y0 - fl.y)}px, vx=${Math.round(fl.vx)}`);
+  await page.keyboard.up('KeyW'); await sleep(450);
+  const hold = await S(async () => { const b = window.__t.body, y = b.y; await new Promise((r) => setTimeout(r, 700)); return { dy: Math.round(b.y - y), air: window.__t.air }; });
+  check('with the stick released the dragon holds its altitude', hold.air && Math.abs(hold.dy) < 16, `dy=${hold.dy}`);
   await page.screenshot({ path: join(SHOTS, '09-flight.png') });
-  await page.keyboard.up('KeyW'); await page.keyboard.down('KeyS'); await sleep(1300);
+  await page.keyboard.up('KeyW'); await page.keyboard.down('KeyS'); await sleep(450);
   const dive = await S(() => window.__t.body.vy);
-  await page.keyboard.up('KeyS'); await page.keyboard.press('KeyI'); await sleep(200);
+  await page.keyboard.up('KeyS'); await page.keyboard.press('Space'); await sleep(250); await page.keyboard.press('KeyI'); await sleep(150);
   check('diving builds downward speed', dive > 60, `vy=${Math.round(dive)}`);
   check('dragon breath fires a projectile', await S(() => window.__scene.shots.list.length > 0));
   await page.screenshot({ path: join(SHOTS, '10-dive-breath.png') });

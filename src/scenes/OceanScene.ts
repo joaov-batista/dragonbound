@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { mix } from '../art/Pix';
+import { Pix, mix } from '../art/Pix';
 import { pixToTexture } from '../art/runtime';
 import { THEMES } from '../art/themes';
 import { audio } from '../audio/AudioManager';
@@ -8,6 +8,7 @@ import { events } from '../core/events';
 import { hud } from '../core/hud';
 import { particleScale, settings } from '../core/settings';
 import { ITEM_NAMES, game } from '../core/state';
+const k0 = (): number => particleScale();
 import type { DragonRecord } from '../dragons/DragonRecord';
 import { DragonTextures } from '../dragons/rendering/DragonTextures';
 import { input } from '../input/InputManager';
@@ -35,7 +36,8 @@ export class OceanScene extends Phaser.Scene {
   private vessel!: Phaser.GameObjects.Sprite; private shadow!: Phaser.GameObjects.Ellipse; private rain!: Phaser.GameObjects.Particles.ParticleEmitter; private clouds: Phaser.GameObjects.Image[] = [];
   private vfx!: VfxManager;
   private x = 0; private y = 0; private a = 0; private speed = 0; private vx = 0; private vy = 0;
-  private flying = false; private comp: DragonRecord | null = null; private stamina = 100; private dashT = 0; private dashCd = 0; private ghostT = 0; private cd = 0; private inv = 0;
+  private flying = false; private comp: DragonRecord | null = null; private stamina = 100; private dashT = 0; private dashCd = 0; private ghostT = 0; private alt = 1; private bank = 0; private lastA = 0; private sprayT = 0;
+  private skyClouds: { img: Phaser.GameObjects.Image; sx: number; sy: number; sf: number }[] = []; private lastCam = { x: 0, y: 0 }; private cd = 0; private inv = 0;
   private storm = 0; private windA = 0; private boltT = 3; private t = 0; private saveT = 20; private leaving = false; private near: IslandSite | null = null; private frameT = 0; private wf = 0;
   private data0: { from?: string; heading?: number; resume?: boolean } = {};
 
@@ -57,8 +59,12 @@ export class OceanScene extends Phaser.Scene {
     this.vessel = this.add.sprite(this.x, this.y, 'ocean', 'boat_0').setDepth(10);
     this.applyVessel();
     this.rain = this.add.particles(0, 0, 'ui', { frame: 'white', x: { min: -40, max: 620 }, y: -6, lifespan: 600, speedY: { min: 380, max: 460 }, speedX: { min: -130, max: -80 }, scaleX: 0.25, scaleY: { min: 1.5, max: 3 }, tint: 0xb8d0f0, alpha: 0.55, frequency: -1 }).setScrollFactor(0).setDepth(60);
-    for (let i = 0; i < 5; i++) this.clouds.push(this.add.image(this.x + (i - 2) * 300, this.y + ((i * 173) % 400) - 200, 'ocean', 'cloudshadow').setScale(3).setDepth(40));
+    for (let i = 0; i < 5; i++) this.clouds.push(this.add.image(this.x + (i - 2) * 300, this.y + ((i * 173) % 400) - 200, 'ocean', 'cloudshadow').setScale(3).setDepth(4));
+    this.makeSkyCloud();
+    this.skyClouds = [];
+    for (let i = 0; i < 6; i++) this.skyClouds.push({ img: this.add.image(0, 0, 'sea-cloud').setScrollFactor(0).setDepth(46).setAlpha(0.5).setScale(1 + (i % 3) * 0.5).setFlipX(i % 2 === 1), sx: (i * 211) % W, sy: (i * 97) % GAME_H, sf: 1.25 + (i % 3) * 0.12 });
     this.tint = this.add.rectangle(0, 0, W, GAME_H, 0xffffff).setOrigin(0).setScrollFactor(0).setDepth(80).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    this.alt = 1; this.bank = 0; this.lastA = this.a;
     const cam = this.cameras.main;
     cam.setBounds(0, 0, OCEAN_W, OCEAN_H).setRoundPixels(true).centerOn(this.x, this.y); cam.fadeIn(450, 8, 6, 16);
     hud.mode = this.flying ? 'oceanFlight' : 'boat'; hud.prompt = null; hud.focusId = null;
@@ -67,6 +73,16 @@ export class OceanScene extends Phaser.Scene {
     audio.setMusic('ocean');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { DragonTextures.dispose(this); for (const k of this.textures.getTextureKeys()) if (k.startsWith('isl-')) this.textures.remove(k); hud.compass = null; hud.minimap = null; input.clearVirtual(); });
     if (DEBUG) (window as unknown as Record<string, unknown>).__ocean = this;
+  }
+
+  /** Soft white cumulus seen from above (drawn over the dragon, at stronger parallax, so it reads as higher up). */
+  private makeSkyCloud(): void {
+    if (this.textures.exists('sea-cloud')) return;
+    const p = new Pix(96, 60);
+    for (let k = 0; k < 9; k++) { const a = (k / 9) * 6.283, r = 12 + ((k * 7) % 6); p.ellipse(48 + Math.cos(a) * 22, 30 + Math.sin(a) * 12, r * 1.2, r, 0xffffff); }
+    p.ellipse(48, 30, 26, 16, 0xffffff);
+    for (let y = 0; y < 60; y++) for (let x = 0; x < 96; x++) if (p.solid(x, y) && (!p.solid(x + 3, y + 3) || !p.solid(x + 2, y + 4))) p.px(x, y, 0xd8e6f4);
+    pixToTexture(this, 'sea-cloud', p);
   }
 
   private applyVessel(): void {
@@ -183,10 +199,15 @@ export class OceanScene extends Phaser.Scene {
       const tail = Math.cos(this.a - this.windA);
       this.stamina = clamp(this.stamina + (tail > 0.5 ? 5 : -2.2 - (inp.down('jump') ? 4 : 0) - this.storm * (ph.abilities.includes('stormRider') ? 0 : 3)) * dt, 0, ph.stats.stamina);
       if (inp.pressed('dash') && this.dashCd <= 0 && this.stamina > 10) { this.dashT = 0.3; this.dashCd = 0.8; this.stamina -= 10; this.inv = 0.4; this.speed = maxV; audio.play('dash'); }
+      // altitude: a dash is a diving swoop down to the waves; otherwise the dragon climbs back to cruising height
+      this.alt += ((this.dashT > 0 ? 0.15 : inp.down('jump') ? 0.75 : 1) - this.alt) * Math.min(1, dt * (this.dashT > 0 ? 6 : 1.2));
       if (this.dashT > 0 && this.ghostT <= 0) { this.ghostT = 0.04; const g = this.add.image(this.vessel.x, this.vessel.y, this.vessel.texture.key, this.vessel.frame.name).setRotation(this.a).setDepth(29).setTint(0x9fe8ff).setTintMode(Phaser.TintModes.FILL).setAlpha(0.5); this.tweens.add({ targets: g, alpha: 0, duration: 280, onComplete: () => g.destroy() }); }
       this.vx += (Math.cos(this.a) * this.speed + wx * 0.5 - this.vx) * Math.min(1, dt * 3); this.vy += (Math.sin(this.a) * this.speed + wy * 0.5 - this.vy) * Math.min(1, dt * 3);
       if (this.storm > 0.6 && !ph.abilities.includes('stormRider')) { this.vx += Math.sin(this.t * 3.1) * 40 * dt; this.vy += Math.cos(this.t * 2.3) * 40 * dt; }
       hud.stamina = this.stamina; hud.staminaMax = ph.stats.stamina; audio.setWindBoost(this.speed / (ph.stats.flySpeed * 0.8));
+      // wingbeat follows effort; wings sweep back while swooping
+      if (this.dashT > 0 || (this.alt < 0.4 && this.dashT > -0.2)) { this.vessel.anims.pause(); this.vessel.setFrame('f6'); }
+      else { if (this.vessel.anims.isPaused) this.vessel.anims.resume(); this.vessel.anims.timeScale = tired ? 1.3 : inp.down('jump') ? 1.7 : mag > 0.2 ? 1 : 0.7; }
       if (inp.pressed('attack') || inp.pressed('ability')) this.fire();
     } else {
       // sail: steer with the stick; forward push fills the sail, wind astern helps
@@ -296,9 +317,35 @@ export class OceanScene extends Phaser.Scene {
     this.tint.setSize(W + 4, GAME_H + 4).setFillStyle(tint);
     // vessel
     const bob = this.flying ? 0 : Math.sin(time / 300) * (1 + this.storm * 2);
-    this.vessel.setPosition(Math.round(this.x), Math.round(this.y + bob - (this.flying ? 14 : 0))).setRotation(this.a).setAlpha(this.inv > 0 && Math.floor(this.inv * 16) % 2 ? 0.4 : 1);
-    if (this.flying) this.vessel.setScale(1); else { this.vessel.setScale(1); this.vessel.setFrame(Math.floor(time / 400) % 2 ? 'boat_1' : 'boat_0'); }
-    this.shadow.setPosition(this.x + 6, this.y + (this.flying ? 16 : 3)).setVisible(this.flying).setRotation(this.a);
+    const lift = this.flying ? 6 + this.alt * 12 : 0;
+    this.vessel.setPosition(Math.round(this.x), Math.round(this.y + bob - lift)).setRotation(this.a).setAlpha(this.inv > 0 && Math.floor(this.inv * 16) % 2 ? 0.4 : 1);
+    if (this.flying) {
+      // bank into turns: the wing axis (sprite's local Y) foreshortens and the body slides toward the turn
+      const turn = Phaser.Math.Angle.Wrap(this.a - this.lastA) / Math.max(dt, 1e-3);
+      this.bank += (Phaser.Math.Clamp(turn * 0.45, -1, 1) - this.bank) * Math.min(1, dt * 6);
+      const sc = 0.92 + this.alt * 0.12;
+      this.vessel.setScale(sc, sc * (1 - Math.abs(this.bank) * 0.3));
+      const off = this.bank * 3; this.vessel.x += Math.round(-Math.sin(this.a) * off); this.vessel.y += Math.round(Math.cos(this.a) * off);
+      // the shadow lies on the water: farther and fainter the higher we fly
+      this.shadow.setPosition(this.x + 4 + this.alt * 8, this.y + 4 + this.alt * 10).setVisible(true).setRotation(this.a).setScale(1.2 - this.alt * 0.35, 1).setAlpha(0.18 + (1 - this.alt) * 0.22);
+      if (this.alt < 0.45 && (this.sprayT -= dt) <= 0) { this.sprayT = 0.05; this.vfx.puff(this.x - Math.cos(this.a) * 10, this.y - Math.sin(this.a) * 10 + 4, 0xe8f6ff, 3, { speed: 50, gravity: 120, life: 380, spread: 70 }); }
+      if (this.alt < 0.3 && Math.random() < dt * 8) { const wk = this.add.image(this.x - Math.cos(this.a) * 14, this.y - Math.sin(this.a) * 14, 'ocean', 'wake').setDepth(4).setAlpha(0.8); this.tweens.add({ targets: wk, scale: 2.2, alpha: 0, duration: 700, onComplete: () => wk.destroy() }); }
+      const sp = this.comp ? this.speed / (game.phenotype(this.comp).stats.flySpeed * 0.62) : 0;
+      if (sp > 0.8 && Math.random() < dt * 22 * k0()) {
+        const a2 = this.a, px = this.x + (Math.random() - 0.5) * 50, py = this.y + (Math.random() - 0.5) * 50, st = this.add.image(px, py, 'ocean', 'streak').setRotation(a2).setDepth(44).setAlpha(0.6);
+        this.tweens.add({ targets: st, x: px - Math.cos(a2) * 70, y: py - Math.sin(a2) * 70, alpha: 0, duration: 300, onComplete: () => st.destroy() });
+      }
+    } else { this.vessel.setScale(1); this.vessel.setFrame(Math.floor(time / 400) % 2 ? 'boat_1' : 'boat_0'); this.shadow.setVisible(false); }
+    this.lastA = this.a;
+    // high clouds: screen-space with parallax > 1 so they slide past faster than the sea (they are closer to the camera)
+    const dcx = cam.scrollX - this.lastCam.x, dcy = cam.scrollY - this.lastCam.y; this.lastCam = { x: cam.scrollX, y: cam.scrollY };
+    if (Math.abs(dcx) + Math.abs(dcy) < 200) for (const c of this.skyClouds) {
+      c.sx -= dcx * c.sf - Math.cos(this.windA) * 6 * dt; c.sy -= dcy * c.sf - Math.sin(this.windA) * 6 * dt;
+      const m = 80;
+      if (c.sx < -m) c.sx += W + 2 * m; if (c.sx > W + m) c.sx -= W + 2 * m; if (c.sy < -m) c.sy += GAME_H + 2 * m; if (c.sy > GAME_H + m) c.sy -= GAME_H + 2 * m;
+      const near = Math.hypot(c.sx - (this.x - cam.scrollX), c.sy - (this.y - cam.scrollY)) < 50 * c.img.scaleX;
+      c.img.setPosition(Math.round(c.sx), Math.round(c.sy)).setVisible(this.flying).setAlpha(near ? 0.3 : 0.55 - this.storm * 0.15).setTint(this.storm > 0.4 ? 0x9aa6bc : 0xffffff);
+    }
     // wake, wind streaks, current streaks
     const k = particleScale();
     if (!this.flying && this.speed > 14 && Math.random() < dt * 22 * k) { const w = this.add.image(this.x - Math.cos(this.a) * 16, this.y - Math.sin(this.a) * 16, 'ocean', 'wake').setDepth(4).setAlpha(0.7); this.tweens.add({ targets: w, scale: 2.4, alpha: 0, duration: 900, onComplete: () => w.destroy() }); }

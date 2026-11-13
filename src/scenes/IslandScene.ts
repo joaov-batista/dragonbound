@@ -8,7 +8,7 @@ import { settings } from '../core/settings';
 import { FOOD_ITEMS, ITEM_NAMES, game } from '../core/state';
 import type { ProjectileSpec, World } from '../core/world';
 import { Dragon } from '../dragons/Dragon';
-import { updateRide } from '../dragons/Flight';
+import { ceilingY, updateRide } from '../dragons/Flight';
 import type { Element, FoodId } from '../dragons/genetics/types';
 import { DragonTextures } from '../dragons/rendering/DragonTextures';
 import { Enemy } from '../entities/Enemy';
@@ -55,6 +55,7 @@ export class IslandScene extends Phaser.Scene {
     this.vfx = new VfxManager(this);
     this.backdrop = new Backdrop(this, this.island.biome, this.island.seaRow * TILE);
     this.view = new IslandView(this, this.island);
+    this.view.addSkyClouds(this.island, (x) => ceilingY(this.worldRef, x));
     this.weather = new WeatherFx(this, this.island.weather, this.island.biome);
     this.shots = new Projectiles(W);
     this.tintRect = this.add.rectangle(0, 0, 10, 10, 0xffffff).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint).setBlendMode(Phaser.BlendModes.MULTIPLY);

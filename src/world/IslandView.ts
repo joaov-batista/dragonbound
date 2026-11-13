@@ -72,6 +72,27 @@ export class IslandView {
     mk('lava-surface', 0xffb030, 0xe8501c, 0xfff0a0);
   }
 
+  /** Puffy clouds scattered through the flyable sky (between the flight ceiling and the terrain). They give flight a sense of speed and altitude. */
+  addSkyClouds(island: IslandData, ceilAt: (x: number) => number): void {
+    const th = THEMES[island.biome], g = island.grid;
+    for (let v = 0; v < 3; v++) if (!this.scene.textures.exists(`skypuff${island.biome}${v}`)) {
+      const w = 64 + v * 24, h = 26 + v * 6, p = new Pix(w, h);
+      for (let k = 0; k < 5 + v; k++) { const cx = 12 + ((w - 24) * k) / (4 + v), r = 7 + ((k * 37 + v * 11) % 7) + (k > 0 && k < 4 + v ? 3 : 0); p.ellipse(cx, h - 8 - r * 0.5, r * 1.2, r, th.cloud); }
+      p.rect(6, h - 10, w - 12, 6, th.cloud);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (p.solid(x, y)) { if (y > h - 9 || !p.solid(x, y + 3)) p.px(x, y, th.cloudShade); else if (!p.solid(x, y - 1)) p.px(x, y, mix(th.cloud, 0xffffff, 0.5)); }
+      pixToTexture(this.scene, `skypuff${island.biome}${v}`, p);
+    }
+    let seed = island.seed;
+    const rnd = (): number => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let x = rnd() * 200; x < g.pxW; x += 150 + rnd() * 230) {
+      const ground = g.groundBelow(x, 0, g.h) ?? island.seaRow * TILE;
+      const lo = ceilAt(x) - 20, hi = Math.min(ground - 90, island.seaRow * TILE - 120);
+      if (hi <= lo) continue;
+      const front = rnd() < 0.3, v = Math.floor(rnd() * 3);
+      this.scene.add.image(Math.round(x), Math.round(lo + rnd() * (hi - lo)), `skypuff${island.biome}${v}`).setDepth(front ? DEPTH.weather - 1 : DEPTH.bgTiles - 5).setAlpha(front ? 0.55 : 0.9).setFlipX(rnd() < 0.5);
+    }
+  }
+
   addLight(x: number, y: number, r: number, color: number, alpha = 0.4): Phaser.GameObjects.Image {
     const img = this.scene.add.image(x, y, 'props', r > 70 ? 'light128' : 'light64').setBlendMode(Phaser.BlendModes.ADD).setTint(color).setAlpha(alpha).setDepth(DEPTH.light);
     img.setScale((r * 2) / (r > 70 ? 128 : 64)); this.lights.push(img);

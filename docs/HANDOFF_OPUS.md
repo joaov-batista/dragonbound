@@ -71,7 +71,7 @@ Confiança 0–100 e medo 0–100. Estágios: Arisco <15, Desconfiado <35, Curio
 - `GameState.populate` cria a população de cada ilha na primeira visita (determinística por `worldSeed`).
 
 ## 12. Voo e combate
-- `Flight.updateRide`: no chão anda; pulo decola. No ar: sustentação ∝ velocidade, subir gasta fôlego, mergulho vira velocidade, batida de asas, dash reto com rastro e invencibilidade (sem pirueta, a pedido do usuário), mordida, sopro elemental (projétil), zonas de vento, turbulência em tempestade. Resposta aos comandos depende de treino, agilidade, independência.
+- `Flight.updateRide`: no chão anda; pulo decola. No ar (modelo "planeio arcade"): solto = mantém altitude/paira, direção = cruzeiro, cima = sobe com fôlego, baixo = mergulho que vira velocidade, inversão freia antes de virar, teto suave por relevo (`ceilingY`), batida de asas, dash reto com rastro e invencibilidade (sem pirueta, a pedido do usuário), mordida, sopro elemental (projétil), zonas de vento, turbulência em tempestade. Resposta aos comandos depende de treino, agilidade, independência.
 - Sair pela borda da ilha voando → `OceanScene` em voo. No oceano o voo é top-down (direção + fôlego + vento de cauda).
 - Combate do herói em `Player.ts` (retângulo de ataque por quadro, `attackId` evita acerto duplo). `IslandScene.strike` resolve dano entre lados. Hitstop e tremor em `IslandScene`.
 

@@ -8,6 +8,8 @@
 - **Cavaleiro**: pose sentada nova, sela no dragão e encaixe calculado pelo rig de cada indivíduo (`saddlePoint` em `DragonPainter.ts`); cavaleiro detalhado na vista de cima.
 - **Tela inicial** refeita: interface fixa (a câmera andava e empurrava os botões para fora), fundo só com céu, nuvens e dragões gerados na hora voando em três profundidades.
 - Rótulos de **beta** no título, menu Sistema, página e README.
+- **Voo lateral refeito** (`Flight.updateRide`): direcional solto = mantém altitude e paira; direção = cruzeiro; cima = sobe (fôlego); baixo = mergulho que vira velocidade; inverter a direção freia até zero antes de virar. Batida de asa acompanha o esforço (rápida ao subir/pairar, lenta planando, recolhida no mergulho), inclinação segue a trajetória. **Teto suave relativo ao relevo** (`ceilingY(w, x)`: ~10 tiles acima do chão mais alto num raio de 18 tiles) para o chão nunca sumir da tela. Nuvens no céu da ilha (algumas na frente) e rastros de vento dão sensação de velocidade.
+- **Voo no mar**: sprite de cima maior (células 80 px), 6 quadros de batida + quadro de asas recolhidas; inclinação nas curvas; altitude com sombra que se afasta/aproxima; dash vira rasante com respingos e esteira; nuvens altas com parallax passando por cima do dragão; rastros na direção do voo.
 
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
@@ -47,7 +49,7 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
 
 ## Resultados de teste (sessão 1)
 - `npm test`: 34/34.
-- `npm run e2e`: 39/39. Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
+- `npm run e2e`: 40/40 (sessão 2: inclui "mantém altitude com o direcional solto"). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
 - Desempenho: ~57 fps no Chromium headless com GL por software, 7 entidades. **Isso não representa aparelhos reais**; nenhum dispositivo físico foi medido.
 
 ## Problemas conhecidos

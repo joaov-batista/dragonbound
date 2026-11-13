@@ -274,37 +274,44 @@ export function paintDragonSheet(ph: Phenotype, scale: number, only?: readonly D
   return { pix, frames };
 }
 
-/** Top-down flight sprite (pointing right): 4 flap frames of 64x64, used on the ocean map. */
+/** Top-down flight sprite (pointing right), 80x80 cells: f0–f5 a full wingbeat, f6 wings swept back for a dive/dash. */
+export const TOP_CELL = 80, TOP_FRAMES = 7;
 export function paintDragonTop(ph: Phenotype, scale: number, rider: boolean): Pix {
-  const pix = new Pix(64 * 4, 64), s = ph.size * scale * 0.82;
+  const C = TOP_CELL / 2, pix = new Pix(TOP_CELL * TOP_FRAMES, TOP_CELL), s = ph.size * scale;
   const pr = ramp(ph.primary), se = ramp(ph.secondary), hn = ramp(ph.horn);
-  for (let f = 0; f < 4; f++) {
-    const c = new Pix(64, 64), k = [1, 0.8, 0.55, 0.8][f], L = 11 * s * ph.bodyLen, G = 4.6 * s * ph.girth, span = 24 * s * ph.wingSpan * k;
+  const SPREAD = [1, 0.88, 0.66, 0.46, 0.62, 0.86];
+  for (let f = 0; f < TOP_FRAMES; f++) {
+    const tuck = f === 6, c = new Pix(TOP_CELL, TOP_CELL), k = tuck ? 0.42 : SPREAD[f], L = 11 * s * ph.bodyLen, G = 4.6 * s * ph.girth;
+    const span = Math.min(C - 3, 24 * s * ph.wingSpan * k), sweep = tuck ? 9 * s : (1 - k) * 4 * s; // tips drift back as the wing closes
     for (const sd of [-1, 1]) {
-      const sh: V = [34, 32 + sd * G * 0.6], wr: V = [36, 32 + sd * span * 0.55], t1: V = [28, 32 + sd * span], t2: V = [20, 32 + sd * span * 0.8], t3: V = [18, 32 + sd * span * 0.45];
-      c.poly([sh, wr, t1, [25, 32 + sd * span * 0.82], t2, [20, 32 + sd * span * 0.58], t3, [22, 32 + sd * G * 0.5]], se[sd < 0 ? 3 : 2]);
+      const sh: V = [C + 2, C + sd * G * 0.6], wr: V = [C + 4 - sweep * 0.4, C + sd * span * 0.55], t1: V = [C - 4 - sweep, C + sd * span], t2: V = [C - 12 - sweep, C + sd * span * 0.8], t3: V = [C - 14 - sweep * 0.6, C + sd * span * 0.45];
+      c.poly([sh, wr, t1, [C - 7 - sweep, C + sd * span * 0.82], t2, [C - 12 - sweep * 0.8, C + sd * span * 0.58], t3, [C - 10, C + sd * G * 0.5]], se[sd < 0 ? 3 : 2]);
+      // membrane ribs + a lit leading edge on the near (upper) wing
       c.limb(sh[0], sh[1], wr[0], wr[1], 1.4 * s, 1, pr); c.limb(wr[0], wr[1], t1[0], t1[1], 1, 0.5, pr); c.line(wr[0], wr[1], t2[0], t2[1], pr[1]); c.line(wr[0], wr[1], t3[0], t3[1], pr[1]);
+      if (sd < 0) c.line(sh[0], sh[1] - 1, wr[0], wr[1] - 1, se[4]);
     }
-    let tx = 32 - L * 0.7, ty = 32;
-    for (let j = 0; j < 6; j++) { const nx = tx - L * 0.26 * ph.tailLen, ny = 32 + Math.sin(f * 1.57 + j * 0.9) * 1.6 * (j / 5); c.limb(tx, ty, nx, ny, G * 0.6 * (1 - j / 6) + 0.6, G * 0.6 * (1 - (j + 1) / 6) + 0.5, pr); tx = nx; ty = ny; }
+    let tx = C - L * 0.7, ty = C;
+    for (let j = 0; j < 6; j++) { const nx = tx - L * 0.26 * ph.tailLen, ny = C + Math.sin(f * 1.05 + j * 0.9) * 1.8 * (j / 5) * (tuck ? 0.3 : 1); c.limb(tx, ty, nx, ny, G * 0.6 * (1 - j / 6) + 0.6, G * 0.6 * (1 - (j + 1) / 6) + 0.5, pr); tx = nx; ty = ny; }
     if (ph.tail !== 'whip') c.poly([[tx + 1, ty], [tx - 4 * s, ty - 3 * s], [tx - 2 * s, ty], [tx - 4 * s, ty + 3 * s]], ph.tail === 'club' ? hn[2] : se[2]);
-    c.limb(32 - L * 0.7, 32, 32 + L * 0.6, 32, G * 0.9, G, pr);
-    c.limb(32 + L * 0.6, 32, 32 + L * 1.25, 32, G * 0.6, G * 0.45, pr);
-    c.ball(32 + L * 1.45, 32, 3.4 * s, 2.9 * s, pr); c.limb(32 + L * 1.5, 32, 32 + L * 1.5 + 4.5 * s, 32, 1.9 * s, 1.2 * s, pr);
-    if (ph.horns !== 'none') for (const sd of [-1, 1]) c.limb(32 + L * 1.35, 32 + sd * 2 * s, 32 + L * 1.35 - 4 * s, 32 + sd * 4 * s, 0.9, 0.3, hn);
-    if (ph.spines !== 'none') for (let j = 0; j < 5; j++) c.px(32 - L * 0.5 + j * L * 0.3, 32, hn[3]);
+    c.limb(C - L * 0.7, C, C + L * 0.6, C, G * 0.9, G, pr);
+    c.limb(C + L * 0.6, C, C + L * 1.25, C, G * 0.6, G * 0.45, pr);
+    c.ball(C + L * 1.45, C, 3.4 * s, 2.9 * s, pr); c.limb(C + L * 1.5, C, C + L * 1.5 + 4.5 * s, C, 1.9 * s, 1.2 * s, pr);
+    c.px(C + L * 1.5 + 1, C - 2 * s, ph.eye); c.px(C + L * 1.5 + 1, C + 2 * s, ph.eye);
+    if (ph.horns !== 'none') for (const sd of [-1, 1]) c.limb(C + L * 1.35, C + sd * 2 * s, C + L * 1.35 - 4 * s, C + sd * 4 * s, 0.9, 0.3, hn);
+    if (ph.spines !== 'none') for (let j = 0; j < 5; j++) c.px(C - L * 0.5 + j * L * 0.3, C, hn[3]);
+    for (let j = -2; j <= 3; j++) c.px(C + j * L * 0.2, C - G * 0.55, pr[4]); // sun on the spine
     if (rider) {
       // top-down rider: saddle blanket, shoulders, arms on the reins, hair + headband, scarf streaming back
-      const tun = ramp(0x3f55a0), skin = ramp(0xd9955f), hair = ramp(0x33283f);
-      c.rect(28, 29, 6, 7, 0xc8463a); c.rect(28, 29, 6, 1, 0xf2c14e); c.rect(28, 35, 6, 1, 0xf2c14e);
-      for (let k = 0; k < 4; k++) { const y = 32 + Math.sin(f * 1.57 + k) * 0.8 * (k / 3); c.px(27 - k * 1.6, y, k < 2 ? 0xe4533c : 0xb8352a); c.px(27 - k * 1.6, y + 1, 0xb8352a); }
-      c.ball(31, 32, 2.4, 3.2, tun);
-      c.line(32, 30, 35, 31, skin[2]); c.line(32, 34, 35, 33, skin[2]); c.px(35, 31, skin[3]); c.px(35, 33, skin[3]);
-      c.line(35, 32, 39 + L * 0.1, 32, 0x7c4a2e);
-      c.ball(32.5, 32, 1.8, 1.8, hair); c.px(33, 32, skin[2]); c.px(32, 31, 0xf2c14e); c.px(32, 33, 0xf2c14e);
+      const tun = ramp(0x3f55a0), skin = ramp(0xd9955f), hair = ramp(0x33283f), R = C - 2;
+      c.rect(R - 4, C - 3, 6, 7, 0xc8463a); c.rect(R - 4, C - 3, 6, 1, 0xf2c14e); c.rect(R - 4, C + 3, 6, 1, 0xf2c14e);
+      for (let q = 0; q < 4; q++) { const y = C + Math.sin(f * 1.05 + q) * 0.8 * (q / 3) * (tuck ? 0.2 : 1); c.px(R - 5 - q * 1.6 - (tuck ? q : 0), y, q < 2 ? 0xe4533c : 0xb8352a); c.px(R - 5 - q * 1.6 - (tuck ? q : 0), y + 1, 0xb8352a); }
+      c.ball(R - 1, C, 2.4, 3.2, tun);
+      c.line(R, C - 2, R + 3, C - 1, skin[2]); c.line(R, C + 2, R + 3, C + 1, skin[2]); c.px(R + 3, C - 1, skin[3]); c.px(R + 3, C + 1, skin[3]);
+      c.line(R + 3, C, R + 7 + L * 0.1, C, 0x7c4a2e);
+      c.ball(R + 0.5, C, 1.8, 1.8, hair); c.px(R + 1, C, skin[2]); c.px(R, C - 1, 0xf2c14e); c.px(R, C + 1, 0xf2c14e);
     }
     c.outline(OUT);
-    pix.blit(c, f * 64, 0);
+    pix.blit(c, f * TOP_CELL, 0);
   }
   return pix;
 }
