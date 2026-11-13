@@ -16,6 +16,8 @@ export interface GameEvents {
   modeChanged: 'ground' | 'flight' | 'boat' | 'menu';
   talk: import('../story/story').Talk;
   openShop: { who: string };
+  /** a bonded dragon was called back, told to follow, kept or released (from the menu) */
+  partyChanged: { id: string; how: 'summon' | 'follow' | 'keep' | 'release' };
 }
 
 class Bus {

@@ -14,7 +14,7 @@ import { DRAGON_OX, DRAGON_OY, DRAGON_FW, DRAGON_FH, type DragonAnim } from './r
 import { DragonTextures } from './rendering/DragonTextures';
 import { saddlePoint } from './rendering/DragonPainter';
 
-export interface FlightState { stamina: number; sx: number; sy: number; flapT: number; dashT: number; dashCd: number; ghostT: number; flapKick: number; pitch: number; breathCd: number; biteCd: number; boost: number; airborne: boolean; wobble: number }
+export interface FlightState { stamina: number; sx: number; sy: number; flapT: number; dashT: number; dashCd: number; ghostT: number; flapKick: number; pitch: number; breathCd: number; biteCd: number; boost: number; airborne: boolean; wobble: number; /** 0..1: how close a fast pass skims the ground or water */ skim: number; skimT: number; /** 0..1 speed relative to top speed, for camera and sound */ speedK: number }
 
 const ELEMENT_FX: Record<Element, { fx: string; sfx: 'fire' | 'water' | 'spore' | 'zap' | 'quake' | 'ice'; color: number }> = {
   fire: { fx: 'firebreath', sfx: 'fire', color: 0xff8a30 }, water: { fx: 'waterjet', sfx: 'water', color: 0x6fd0f0 }, nature: { fx: 'spore', sfx: 'spore', color: 0x9fe070 },
@@ -39,7 +39,7 @@ export class Dragon implements Damageable {
     this.sprite = sc.add.sprite(rec.x, rec.y, 'ui', 'white').setVisible(false).setDepth(DEPTH.entities + (rec.bonded ? 2 : 1));
     this.emote = sc.add.image(rec.x, rec.y, 'ui', 'e_question').setVisible(false).setDepth(DEPTH.vfx + 2);
     if (rec.trapped) this.trap = sc.add.image(rec.x, rec.y, 'props', 'trap').setOrigin(0.5, 1).setDepth(DEPTH.entities + 3).setScale(1.5 * this.s + 0.4);
-    this.flight = { stamina: this.ph.stats.stamina, sx: 0, sy: 0, flapT: 0, dashT: 0, dashCd: 0, ghostT: 0, flapKick: 0, pitch: 0, breathCd: 0, biteCd: 0, boost: 0, airborne: false, wobble: 0 };
+    this.flight = { stamina: this.ph.stats.stamina, sx: 0, sy: 0, flapT: 0, dashT: 0, dashCd: 0, ghostT: 0, flapKick: 0, pitch: 0, breathCd: 0, biteCd: 0, boost: 0, airborne: false, wobble: 0, skim: 0, skimT: 0, speedK: 0 };
     this.lastX = rec.x;
   }
 

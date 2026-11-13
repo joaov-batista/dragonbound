@@ -16,6 +16,7 @@ export interface DragonRecord {
   drift: Partial<Record<Trait, number>>; memories: Memory[];
   island: string; /** depth lane on that island (-1 back, 0 main, 1 front); absent = 0 */ lane?: number; homeX: number; homeY: number; homeR: number; x: number; y: number;
   follow: boolean; trapped: boolean; injured: boolean; met: boolean; eggOf?: string;
+  /** bonded but "kept": stops following and lives on its own where it was left, until called back from the menu */ kept?: boolean;
 }
 
 export function bondStage(r: DragonRecord): BondStage {

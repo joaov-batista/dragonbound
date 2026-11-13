@@ -37,6 +37,9 @@ export class OceanScene extends Phaser.Scene {
   private vfx!: VfxManager;
   private x = 0; private y = 0; private a = 0; private speed = 0; private vx = 0; private vy = 0;
   private flying = false; private comp: DragonRecord | null = null; private stamina = 100; private dashT = 0; private dashCd = 0; private ghostT = 0; private alt = 1; private bank = 0; private lastA = 0; private sprayT = 0;
+  /** the rest of the party: wingmates in formation behind the rider (or circling over the boat) */
+  private vign: Phaser.GameObjects.Image | null = null;
+  private wings: { rec: DragonRecord; spr: Phaser.GameObjects.Sprite; sh: Phaser.GameObjects.Ellipse; x: number; y: number; a: number; ph: number }[] = [];
   private skyClouds: { img: Phaser.GameObjects.Image; sx: number; sy: number; sf: number }[] = []; private lastCam = { x: 0, y: 0 }; private cd = 0; private inv = 0;
   private storm = 0; private windA = 0; private boltT = 3; private t = 0; private saveT = 20; private leaving = false; private near: IslandSite | null = null; private frameT = 0; private wf = 0;
   private data0: { from?: string; heading?: number; resume?: boolean } = {};
@@ -64,7 +67,19 @@ export class OceanScene extends Phaser.Scene {
     this.skyClouds = [];
     for (let i = 0; i < 6; i++) this.skyClouds.push({ img: this.add.image(0, 0, 'sea-cloud').setScrollFactor(0).setDepth(46).setAlpha(0.5).setScale(1 + (i % 3) * 0.5).setFlipX(i % 2 === 1), sx: (i * 211) % W, sy: (i * 97) % GAME_H, sf: 1.25 + (i % 3) * 0.12 });
     this.tint = this.add.rectangle(0, 0, W, GAME_H, 0xffffff).setOrigin(0).setScrollFactor(0).setDepth(80).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    if (!this.textures.exists('flight-vignette')) {
+      const c = this.textures.createCanvas('flight-vignette', 256, 144)!, x = c.getContext();
+      const gr = x.createRadialGradient(128, 72, 40, 128, 72, 150); gr.addColorStop(0, 'rgba(8,10,24,0)'); gr.addColorStop(0.6, 'rgba(8,10,24,0.15)'); gr.addColorStop(1, 'rgba(8,10,24,0.85)');
+      x.fillStyle = gr; x.fillRect(0, 0, 256, 144); c.refresh();
+    }
+    this.vign = this.add.image(0, 0, 'flight-vignette').setOrigin(0).setScrollFactor(0).setDepth(81).setAlpha(0);
     this.alt = 1; this.bank = 0; this.lastA = this.a;
+    this.wings = game.party().filter((r) => r !== this.comp).slice(0, 5).map((rec, i) => {
+      const key = DragonTextures.ensureTop(this, rec, false);
+      const spr = this.add.sprite(this.x, this.y, key, 'f0').setDepth(29).play({ key, startFrame: i % 6 });
+      spr.anims.timeScale = 0.8 + (i % 3) * 0.12;
+      return { rec, spr, sh: this.add.ellipse(this.x, this.y, 26, 9, 0x000020, 0.2).setDepth(3), x: this.x - 40 * (i + 1), y: this.y, a: this.a, ph: i * 1.7 };
+    });
     const cam = this.cameras.main;
     cam.setBounds(0, 0, OCEAN_W, OCEAN_H).setRoundPixels(true).centerOn(this.x, this.y); cam.fadeIn(450, 8, 6, 16);
     hud.mode = this.flying ? 'oceanFlight' : 'boat'; hud.prompt = null; hud.focusId = null;
@@ -250,6 +265,28 @@ export class OceanScene extends Phaser.Scene {
     this.vfx.update();
   }
 
+  /** Wingmates: a loose V behind the rider that banks with the turns; over the boat they circle lazily. */
+  private updateWings(time: number, dt: number): void {
+    const SLOTS = [[-34, -30], [-34, 30], [-64, -54], [-64, 54], [-92, 0]];
+    this.wings.forEach((w, i) => {
+      let tx: number, ty: number, ta: number;
+      if (this.flying) {
+        const [bx, by] = SLOTS[i], c = Math.cos(this.a), sn = Math.sin(this.a);
+        const sway = Math.sin(time / 700 + w.ph) * 6;
+        tx = this.x + bx * c - (by + sway) * sn; ty = this.y + bx * sn + (by + sway) * c; ta = this.a;
+      } else {
+        const ang = time / 2600 + w.ph, r = 46 + i * 10;
+        tx = this.x + Math.cos(ang) * r; ty = this.y + Math.sin(ang) * r * 0.7; ta = ang + Math.PI / 2;
+      }
+      const k = Math.min(1, dt * (this.dashT > 0 ? 2.2 : 3.2));
+      w.x += (tx - w.x) * k; w.y += (ty - w.y) * k; w.a = Phaser.Math.Angle.RotateTo(w.a, ta, dt * 3);
+      const lift = this.flying ? 8 + this.alt * 14 + Math.sin(time / 500 + w.ph) * 2 : 22;
+      w.spr.setPosition(Math.round(w.x), Math.round(w.y - lift)).setRotation(w.a).setScale(0.85, 0.85 * (1 - Math.abs(this.flying ? this.bank : 0.3) * 0.25));
+      w.sh.setPosition(w.x + 4 + lift * 0.5, w.y + 4 + lift * 0.4).setRotation(w.a).setAlpha(0.12 + (this.flying ? (1 - this.alt) * 0.15 : 0.05));
+      if (this.flying && this.alt < 0.45 && Math.random() < dt * 10) this.vfx.puff(w.x, w.y + 4, 0xe8f6ff, 2, { speed: 40, gravity: 120, life: 320, spread: 70 });
+    });
+  }
+
   private updateCreatures(dt: number): void {
     for (const c of this.creatures) {
       if (!c.alive) continue;
@@ -336,6 +373,12 @@ export class OceanScene extends Phaser.Scene {
         this.tweens.add({ targets: st, x: px - Math.cos(a2) * 70, y: py - Math.sin(a2) * 70, alpha: 0, duration: 300, onComplete: () => st.destroy() });
       }
     } else { this.vessel.setScale(1); this.vessel.setFrame(Math.floor(time / 400) % 2 ? 'boat_1' : 'boat_0'); this.shadow.setVisible(false); }
+    this.updateWings(time, dt);
+    // swooping low pulls the view toward the waves; top speed darkens the edges
+    const cs = settings.flightCam, spK = this.flying && this.comp ? this.speed / (game.phenotype(this.comp).stats.flySpeed * 0.62) : 0;
+    const zT = 1 + (this.flying ? (1 - this.alt) * 0.09 * cs : 0);
+    cam.setZoom(cam.zoom + (zT - cam.zoom) * Math.min(1, dt * 3));
+    if (this.vign) { const va = this.flying ? (Math.max(0, spK - 0.85) * 1.4 + (this.dashT > 0 ? 0.3 : 0)) * cs : 0; this.vign.setDisplaySize(W + 4, GAME_H + 4).setAlpha(this.vign.alpha + (Math.min(0.8, va) - this.vign.alpha) * Math.min(1, dt * 4)); }
     this.lastA = this.a;
     // high clouds: screen-space with parallax > 1 so they slide past faster than the sea (they are closer to the camera)
     const dcx = cam.scrollX - this.lastCam.x, dcy = cam.scrollY - this.lastCam.y; this.lastCam = { x: cam.scrollX, y: cam.scrollY };

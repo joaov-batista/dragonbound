@@ -100,8 +100,20 @@ export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: b
     const k = clamp(Math.hypot(b.vx, b.vy) / (maxV * 1.2), 0, 1);
     audio.setWindBoost(k);
     if (k > 0.5 && Math.random() < dt * 26 * k) speedStreak(w, b.x - d.facing * (10 + Math.random() * 30), b.y - 6 - Math.random() * 40 * d.scale, b.vx, b.vy, k);
+    f.speedK = k;
+    // low pass: a fast skim over the ground or the sea kicks up dust or spray behind the wings
+    let gy = w.grid.groundBelow(b.x, b.y, 4), water = false;
+    for (let yy = b.y + 4; yy < b.y + 72; yy += 6) if (w.grid.liquidAt(b.x, yy) === Liquid.Water) { if (gy === null || yy < gy) { gy = yy; water = true; } break; }
+    const gap = gy === null ? 999 : gy - b.y, skimT = gap < 60 && Math.abs(b.vx) > maxV * 0.5 ? (1 - gap / 60) * Math.min(1, Math.abs(b.vx) / maxV) : 0;
+    f.skim += (skimT - f.skim) * Math.min(1, dt * 8);
+    if (f.skim > 0.15 && gy !== null) {
+      f.skimT -= dt;
+      if (Math.random() < dt * 40 * f.skim) w.vfx.puff(b.x - d.facing * (6 + Math.random() * 26), gy - 2, water ? 0xe8f6ff : 0xcab894, water ? 3 : 2, { speed: water ? 70 : 45, gravity: water ? 260 : 40, spread: 50, life: water ? 420 : 520 });
+      if (water && f.skimT <= 0) { f.skimT = 0.18; w.vfx.play('splash', b.x - d.facing * 18, gy, { scale: 0.45 + f.skim * 0.4 }); }
+      if (!water && f.skimT <= 0) { f.skimT = 0.5; audio.play('dash', 0.15 + f.skim * 0.2); }
+    }
   }
-  if (!d.air) { if (inp.pressed('ability') && f.breathCd <= 0) { f.breathCd = 1; d.setAnim('attack'); d.strike(true); } audio.setWindBoost(0); }
+  if (!d.air) { f.speedK = 0; f.skim = 0; if (inp.pressed('ability') && f.breathCd <= 0) { f.breathCd = 1; d.setAnim('attack'); d.strike(true); } audio.setWindBoost(0); }
   // rider + sprite
   d.finish(dt, null);
   // pitch follows the flight path (nose down in a dive, up in a climb), eased so it never snaps

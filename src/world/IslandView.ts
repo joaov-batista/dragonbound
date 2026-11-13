@@ -73,6 +73,8 @@ export class IslandView {
   }
 
   /** Puffy clouds scattered through the flyable sky (between the flight ceiling and the terrain). They give flight a sense of speed and altitude. */
+  /** sky clouds a rider can punch through */
+  readonly skyPuffs: { img: Phaser.GameObjects.Image; front: boolean }[] = [];
   addSkyClouds(island: IslandData, ceilAt: (x: number) => number): void {
     const th = THEMES[island.biome], g = island.grid;
     for (let v = 0; v < 3; v++) if (!this.scene.textures.exists(`skypuff${island.biome}${v}`)) {
@@ -89,7 +91,8 @@ export class IslandView {
       const lo = ceilAt(x) - 20, hi = Math.min(ground - 90, island.seaRow * TILE - 120);
       if (hi <= lo) continue;
       const front = rnd() < 0.3, v = Math.floor(rnd() * 3);
-      this.scene.add.image(Math.round(x), Math.round(lo + rnd() * (hi - lo)), `skypuff${island.biome}${v}`).setDepth(front ? DEPTH.weather - 1 : DEPTH.bgTiles - 5).setAlpha(front ? 0.55 : 0.9).setFlipX(rnd() < 0.5);
+      const img = this.scene.add.image(Math.round(x), Math.round(lo + rnd() * (hi - lo)), `skypuff${island.biome}${v}`).setDepth(front ? DEPTH.weather - 1 : DEPTH.bgTiles - 5).setAlpha(front ? 0.55 : 0.9).setFlipX(rnd() < 0.5);
+      this.skyPuffs.push({ img, front });
     }
   }
 

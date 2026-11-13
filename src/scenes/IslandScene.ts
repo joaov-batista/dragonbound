@@ -61,7 +61,7 @@ export class IslandScene extends Phaser.Scene {
   private entry!: IslandEntry; private stop = 0; private mount: Dragon | null = null; private focus: Dragon | null = null;
   private buildQueue: Dragon[] = []; private promptT = 0; private saveT = 45; private hatchT = 2; private foodT = 0; private leaving = false;
   private foodCache = new Map<Dragon, { x: number; y: number; thing: Interactable } | null>();
-  private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private lookX = 0; private fallT = 0; private caveK = 0; private camY = 0;
+  private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private lookX = 0; private fz = 1; private mistA = 0; private inCloud = false; private vign!: Phaser.GameObjects.Image; private mist!: Phaser.GameObjects.Rectangle; private fallT = 0; private caveK = 0; private camY = 0;
 
   constructor() { super('Island'); }
   init(data: IslandEntry): void { this.entry = data; }
@@ -115,6 +115,14 @@ export class IslandScene extends Phaser.Scene {
     this.tagCam = this.overlayCam;
     this.weather = new WeatherFx(this, this.island.weather, this.island.biome);
     this.tintRect = this.add.rectangle(0, 0, 10, 10, 0xffffff).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint).setBlendMode(Phaser.BlendModes.MULTIPLY);
+    // flight immersion: speed vignette and cloud mist, screen-fixed above the world
+    if (!this.textures.exists('flight-vignette')) {
+      const c = this.textures.createCanvas('flight-vignette', 256, 144)!, x = c.getContext();
+      const gr = x.createRadialGradient(128, 72, 40, 128, 72, 150); gr.addColorStop(0, 'rgba(8,10,24,0)'); gr.addColorStop(0.6, 'rgba(8,10,24,0.15)'); gr.addColorStop(1, 'rgba(8,10,24,0.85)');
+      x.fillStyle = gr; x.fillRect(0, 0, 256, 144); c.refresh();
+    }
+    this.vign = this.add.image(0, 0, 'flight-vignette').setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint + 2).setAlpha(0);
+    this.mist = this.add.rectangle(0, 0, 10, 10, 0xf4f8ff, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint + 1);
 
     // where does the player arrive?
     const p = game.save.player, dock = this.island.spawns.find((s) => s.t === 'dock');
@@ -129,10 +137,12 @@ export class IslandScene extends Phaser.Scene {
     this.tagCam = lane.cam;
     this.player = new Player(lane.world, px, py);
 
-    // companion travels with the player; everyone else lives where they were left
+    // the party (companion + followers) travels with the player; kept dragons live where they were left
     const comp = game.companion;
-    if (comp && comp.island !== this.island.id) { comp.island = this.island.id; comp.homeX = px; comp.homeY = py; }
-    if (comp && (this.entry.entry !== 'load')) { comp.x = px - 30; comp.y = py; comp.lane = lane.depth; }
+    game.party().forEach((r, i) => {
+      if (r.island !== this.island.id) { r.island = this.island.id; r.homeX = px; r.homeY = py; }
+      if (this.entry.entry !== 'load') { r.x = px - 30 - i * 34; r.y = py - (this.entry.entry.startsWith('air') && r !== comp ? 60 + i * 18 : 0); r.lane = lane.depth; }
+    });
     for (const rec of game.dragonsOn(this.island.id)) this.addDragon(rec, byDepth(rec.lane));
     this.tagCam = byDepth(0).cam;
     for (const e of game.save.eggs) if (e.island === this.island.id) this.add.image(e.x, e.y - 2, 'props', 'egg').setOrigin(0.5, 1).setDepth(DEPTH.entities).setName('egg-' + e.id);
@@ -146,7 +156,11 @@ export class IslandScene extends Phaser.Scene {
     if (this.entry.entry.startsWith('air') && comp) {
       const d = this.dragons.find((x) => x.rec === comp);
       if (d) { d.build(); d.body.x = px; d.body.y = py; d.facing = this.entry.entry === 'air-west' ? 1 : -1; d.body.vx = d.facing * 120; this.doMount(d, true); d.air = true; d.flight.airborne = true; }
+      // wingmates arrive alongside, in the air
+      for (const w of this.dragons) if (w.rec !== comp && w.rec.bonded && w.rec.follow && !w.rec.kept) { if (!w.ready) w.build(); w.facing = this.entry.entry === 'air-west' ? 1 : -1; w.body.vx = w.facing * 110; w.air = true; }
     }
+    const offParty = events.on('partyChanged', (e) => this.onPartyChanged(e.id, e.how));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offParty);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       hud.minimap = null; hud.lanes = null; this.tagCam = null; this.events.off(Phaser.Scenes.Events.ADDED_TO_SCENE);
@@ -212,7 +226,7 @@ export class IslandScene extends Phaser.Scene {
     if (Math.abs(target - this.laneT) < 0.002) this.laneT = target;
     const act = this.lane.cam, sx = act.scrollX, sy = act.scrollY;
     for (const l of this.lanes) {
-      const d = l.depth - this.laneT, z = Math.pow(1.6, d), ad = Math.abs(d);
+      const d = l.depth - this.laneT, z = Math.pow(1.6, d) * this.fz, ad = Math.abs(d);
       l.cam.setZoom(z);
       if (l !== this.lane) {
         // distant lanes sit a little higher on screen (their relief peeks over ours), near ones hug the bottom edge
@@ -259,11 +273,12 @@ export class IslandScene extends Phaser.Scene {
     pl.world = to.world; this.tagTo(pl.sprite, to.cam);
     if (!this.mount && mover.onGround) mover.vy = -90;
     // a following companion comes along if it is close
-    const comp = from.dragons.find((d) => d.rec === game.companion && !d.ridden && d.rec.follow);
-    if (comp && Math.hypot(comp.body.x - mover.x, comp.body.y - mover.y) < 260) {
-      const cy = this.freeSpot(to, { x: mover.x - pl.facing * 30, y: mover.y, w: comp.body.w, h: comp.body.h }, true);
-      moveDragon(comp); comp.body.x = mover.x - pl.facing * 30; comp.body.y = cy ?? mover.y - 40; comp.air = cy === null || comp.air;
-    }
+    const party = from.dragons.filter((d) => d.rec.bonded && !d.ridden && d.rec.follow && !d.rec.kept && Math.hypot(d.body.x - mover.x, d.body.y - mover.y) < 260);
+    party.forEach((comp, i) => {
+      const fx = mover.x - pl.facing * (30 + i * 30);
+      const cy = this.freeSpot(to, { x: fx, y: mover.y, w: comp.body.w, h: comp.body.h }, true);
+      moveDragon(comp); comp.body.x = fx; comp.body.y = cy ?? mover.y - 40; comp.air = cy === null || comp.air;
+    });
     this.lane = to; game.save.player.lane = to.depth; this.focus = null; hud.focusId = null; this.tagCam = to.cam;
     to.cam.setBounds(0, -400, to.data.grid.pxW, to.data.grid.pxH + 400);
     to.cam.scrollX = from.cam.scrollX; to.cam.scrollY = from.cam.scrollY;
@@ -389,7 +404,7 @@ export class IslandScene extends Phaser.Scene {
     this.mount = null; d.ridden = false; d.sprite.setRotation(0);
     this.player.sprite.setDepth(DEPTH.player).setVisible(true);
     this.player.dismount(d.body.x - d.facing * 4, d.body.y - (d.air ? 30 : 2), d.air ? -210 : -120);
-    d.mind.force('follow', 0.5); d.rec.follow = true;
+    if (!d.rec.kept) { d.rec.follow = true; d.mind.force('follow', 0.5); }
     hud.mode = 'ground'; events.emit('modeChanged', 'ground'); audio.setWindBoost(0);
   }
 
@@ -401,6 +416,39 @@ export class IslandScene extends Phaser.Scene {
     if (!game.canRide(best.rec)) { events.emit('toast', { text: game.stage(best.rec) !== 'adult' ? `${best.rec.name} ainda é jovem demais para ser montado.` : best.rec.hp <= 0 ? `${best.rec.name} está ferido.` : `${best.rec.name} é pequeno demais para carregar você.` }); audio.play('deny'); return; }
     if (!best.mind.bond.obeys('mount', Math.random())) { events.emit('toast', { text: `${best.rec.name} se esquiva — hoje não está com vontade.` }); best.mind.force('play', 1.5); audio.play('deny'); return; }
     this.doMount(best);
+  }
+
+  /** Menu orders for bonded dragons: call one back (it flies in from wherever it lives), keep one here, or release it. */
+  private onPartyChanged(id: string, how: 'summon' | 'follow' | 'keep' | 'release'): void {
+    const rec = game.save.dragons[id]; if (!rec) return;
+    const pl = this.player.body;
+    let d = this.lanes.flatMap((l) => l.dragons).find((x) => x.rec === rec);
+    if (how === 'summon' || how === 'follow') {
+      const far = !d || Math.hypot(d.body.x - pl.x, d.body.y - pl.y) > 700 || !this.lane.dragons.includes(d);
+      if (!d) {
+        // lives on another island: it heard the call and flies over the sea to you
+        rec.island = this.island.id; rec.lane = this.lane.depth; rec.x = pl.x - this.player.facing * 320; rec.y = pl.y - 140;
+        this.tagCam = this.lane.cam; d = this.addDragon(rec, this.lane); this.tagCam = this.lane.cam;
+      } else if (far) {
+        if (!this.lane.dragons.includes(d)) this.moveDragonTo(d, this.lane);
+        d.body.x = pl.x - this.player.facing * 320; d.body.y = pl.y - 140;
+      }
+      if (!d.ready) d.build(); if (far) { d.air = true; d.body.vx = this.player.facing * 160; }
+      d.mind.force('follow', 2); d.vocalize('chirp', pl.x);
+      events.emit('toast', { text: far ? `${rec.name} ouviu seu chamado e está voando até você!` : `${rec.name} vai te seguir.`, icon: 'wing' });
+    } else if (how === 'keep') {
+      if (d) { d.mind.force('explore', 3); d.vocalize('purr', d.body.x); }
+      events.emit('toast', { text: `${rec.name} vai viver por aqui. Chame-o de volta no menu Dragões.`, icon: 'star' });
+    } else {
+      if (d) { if (d.ridden) this.doDismount(); d.mind.force('explore', 4); d.vocalize('roar', d.body.x); this.vfx.play('blessing', d.body.x, d.body.y, {}); }
+      events.emit('toast', { text: `${rec.name} voltou à vida selvagem. Ele vai se lembrar de você.`, icon: 'star' });
+    }
+    events.emit('hudDirty');
+  }
+  private moveDragonTo(d: Dragon, to: Lane): void {
+    for (const l of this.lanes) { const i = l.dragons.indexOf(d); if (i >= 0) l.dragons.splice(i, 1); }
+    to.dragons.push(d); d.world = to.world; d.rec.lane = to.depth;
+    for (const o of d.objects()) this.tagTo(o, to.cam);
   }
 
   private whistle(): void {
@@ -416,8 +464,17 @@ export class IslandScene extends Phaser.Scene {
       events.emit('toast', { text: `${comp.rec.name} mergulhou para te resgatar!`, icon: 'wing' }); return;
     }
     if (dist < 80 && pl.body.onGround) { comp.rec.follow = !comp.rec.follow; comp.mind.force(comp.rec.follow ? 'follow' : 'stay', 0.5); events.emit('toast', { text: comp.rec.follow ? `${comp.rec.name}: seguir` : `${comp.rec.name}: esperar aqui` }); }
-    else if (comp.mind.bond.obeys('come', Math.random())) { comp.rec.follow = true; comp.mind.force('follow', 1); comp.vocalize('chirp', pl.body.x); if (dist > 700) { comp.body.x = pl.body.x - pl.facing * 120; comp.body.y = pl.body.y - 80; comp.air = true; } }
+    else if (comp.mind.bond.obeys('come', Math.random())) { if (!comp.rec.kept) comp.rec.follow = true; comp.mind.force('follow', 1); comp.vocalize('chirp', pl.body.x); if (dist > 700) { comp.body.x = pl.body.x - pl.facing * 120; comp.body.y = pl.body.y - 80; comp.air = true; } }
     else events.emit('toast', { text: `${comp.rec.name} ouviu, mas está distraído.` });
+    // the rest of the party answers the whistle too
+    let k = 1;
+    for (const d of this.dragons) {
+      if (d === comp || d.ridden || !d.rec.bonded || !d.rec.follow || d.rec.kept || !d.ready) continue;
+      if (!d.mind.bond.obeys('come', Math.random())) continue;
+      d.mind.force('follow', 1);
+      if (Math.hypot(d.body.x - pl.body.x, d.body.y - pl.body.y) > 700) { d.body.x = pl.body.x - pl.facing * (120 + k * 40); d.body.y = pl.body.y - 80 - k * 16; d.air = true; }
+      k++;
+    }
   }
 
   private commandAttack(): void {
@@ -428,6 +485,7 @@ export class IslandScene extends Phaser.Scene {
     if (!tgt) { events.emit('toast', { text: 'Nenhum alvo por perto.' }); return; }
     if (comp.mind.bond.obeys('attack', Math.random())) { tgt.aggro = true; comp.mind.provoke(1.2); comp.mind.force('protect', 0.6); comp.vocalize('roar', comp.body.x); this.vfx.play('exclaim', tgt.body.x, tgt.body.y - 20, { scale: 0.6 }); }
     else { events.emit('toast', { text: `${comp.rec.name} hesita.` }); audio.play('deny'); }
+    for (const d of this.dragons) if (d !== comp && d.ready && !d.ridden && d.rec.bonded && d.rec.follow && !d.rec.kept && Math.abs(d.body.x - this.player.body.x) < 320 && d.mind.bond.obeys('attack', Math.random())) { d.mind.provoke(1.1); d.mind.force('protect', 0.6); }
   }
 
   private useItem(): void {
@@ -477,9 +535,9 @@ export class IslandScene extends Phaser.Scene {
     const comp = game.companion;
     o.atSea = true; o.flying = how !== 'boat';
     o.x = site.x + (how === 'fly-east' ? site.r * 1.25 + 60 : -(site.r * 1.25 + 60)); o.y = site.y + (how === 'boat' ? 30 : 0);
-    if (comp) { comp.island = this.island.id; }
+    for (const r of game.party()) { r.island = this.island.id; r.lane = 0; }
+    if (comp) { comp.island = this.island.id; comp.lane = 0; }
     game.save.player.x = -1; game.save.player.lane = 0;
-    if (comp) comp.lane = 0;
     void game.persist().catch(() => undefined);
     this.cameras.main.fadeOut(400, 8, 6, 16);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('Ocean', { from: this.island.id, heading: how === 'fly-east' ? 0 : Math.PI }));
@@ -660,6 +718,9 @@ export class IslandScene extends Phaser.Scene {
     const first = game.save.stats.bonded === 0;
     game.save.stats.bonded++;
     if (!game.save.companion) game.save.companion = d.rec.genes.id;
+    const full = game.party().length > game.maxFollowers;
+    if (full) { d.rec.kept = true; d.rec.follow = false; d.rec.homeX = d.body.x; d.rec.homeY = d.body.y; d.rec.homeR = Math.max(d.rec.homeR, 220); }
+    if (full) this.time.delayedCall(2600, () => events.emit('toast', { text: `Você já tem ${game.maxFollowers} dragão(ões) seguindo: ${d.rec.name} ficará guardado por aqui. Chame-o no menu Dragões.`, icon: 'wing' }));
     this.vfx.play('levelup', d.body.x, d.body.y, {}); this.vfx.play('blessing', this.player.body.x, this.player.body.y, {});
     audio.play('bond'); d.vocalize('purr', d.body.x); this.hitstop(0.12); this.cameras.main.flash(300, 160, 255, 230);
     events.emit('bonded', { id: d.rec.genes.id });
@@ -729,6 +790,34 @@ export class IslandScene extends Phaser.Scene {
     if (Math.floor(time / 500) !== Math.floor((time - dt * 1000) / 500)) this.applyAmbience(this.caveK);
   }
 
+  /** Flight immersion: the view pulls back with speed, rumbles on low passes, and clouds wash over the screen. */
+  private flightFeel(dt: number, W: number): void {
+    const m = this.mount, air = !!m?.air, cs = settings.flightCam, cam = this.lane.cam;
+    const f = m?.flight, k = air && f ? f.speedK : 0;
+    const diving = air && m!.body.vy > 220;
+    const fzT = air ? 1 - (0.12 * k + (diving ? 0.035 : 0) + (f && f.dashT > 0 ? 0.03 : 0)) * cs : 1;
+    this.fz += (fzT - this.fz) * Math.min(1, dt * (fzT < this.fz ? 1.6 : 2.4));
+    if (Math.abs(this.fz - 1) < 0.001) this.fz = 1;
+    if (air && f && cs > 0 && settings.screenShake > 0) {
+      const rum = (f.skim * 1.6 + (diving ? Math.min(1, (m!.body.vy - 220) / 140) * 0.8 : 0)) * cs * settings.screenShake;
+      if (rum > 0.05) { cam.scrollX += (Math.random() - 0.5) * rum * 2; cam.scrollY += (Math.random() - 0.5) * rum * 2; }
+      if (f.flapKick > 0.3) cam.scrollY -= (f.flapKick - 0.3) * 6 * cs; // each wingbeat lifts the view a touch
+    }
+    // clouds: punching through one fills the screen with mist and beads the dragon with droplets
+    let cloud = 0;
+    if (air && m && this.lane.depth === 0) {
+      const bx = m.body.x, by = m.body.y - 16;
+      for (const p of this.lane.view.skyPuffs) { const im = p.img, hw = im.width / 2, hh = im.height / 2; if (Math.abs(bx - im.x) < hw - 6 && Math.abs(by - im.y) < hh - 2) { cloud = p.front ? 0.5 : 0.32; break; } }
+    }
+    if (cloud > 0 && !this.inCloud) { audio.play('flap', 0.4); audio.play('dash', 0.25); }
+    if (cloud > 0 && m && Math.random() < dt * 30) this.vfx.puff(m.body.x - m.facing * 20, m.body.y - 20 + (Math.random() - 0.5) * 30, 0xffffff, 1, { speed: 30, gravity: 0, life: 500, spread: 180 });
+    this.inCloud = cloud > 0;
+    this.mistA += (cloud * cs - this.mistA) * Math.min(1, dt * (cloud > this.mistA ? 5 : 1.6));
+    this.mist.setSize(W + 4, GAME_H + 4).setFillStyle(0xf4f8ff, this.mistA);
+    const va = air ? Math.max(0, k - 0.35) * 0.9 * cs + (f && f.dashT > 0 ? 0.25 * cs : 0) : 0;
+    this.vign.setDisplaySize(W + 4, GAME_H + 4).setAlpha(this.vign.alpha + (va - this.vign.alpha) * Math.min(1, dt * 4));
+  }
+
   private updateCamera(dt: number): void {
     const cam = this.lane.cam, b = this.mount ? this.mount.body : this.player.body, W = this.scale.width;
     // during a boss fight frame both the player and the boss
@@ -740,6 +829,7 @@ export class IslandScene extends Phaser.Scene {
     if (Math.abs(ty - this.camY) > 70) this.camY = ty - Math.sign(ty - this.camY) * 70;
     cam.scrollX += (b.x + this.lookX - W / 2 - cam.scrollX) * Math.min(1, dt * 8);
     cam.scrollY = this.camY - GAME_H / 2 + 20;
+    this.flightFeel(dt, W);
     if (this.grid.liquidAt(b.x, b.y - 30) === Liquid.Water && !this.mount) this.tintRect.setFillStyle(mulColor(this.tintRect.fillColor, 0xa8d8f0));
     this.syncLaneCams(dt);
   }

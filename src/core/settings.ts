@@ -7,12 +7,17 @@ export interface Settings {
   touchOpacity: number; touchScale: number; touchEnabled: 'auto' | 'on' | 'off';
   /** Custom positions for touch widgets, normalised to the safe viewport (0..1), keyed by widget id and mode. */
   touchLayout: Record<string, { x: number; y: number }>;
+  /** how many bonded dragons may follow the player at once (1..6) */
+  maxFollowers: number;
+  /** flight camera: zoom out with speed and shake on dives (0 = off, 1 = full) */
+  flightCam: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   master: 0.8, music: 0.5, sfx: 0.8, ambience: 0.6, voices: 0.8,
   quality: 'high', particles: 1, fpsCap: 60, showFps: false, screenShake: 1,
   touchOpacity: 0.75, touchScale: 1, touchEnabled: 'auto', touchLayout: {},
+  maxFollowers: 3, flightCam: 1,
 };
 
 const KEY = 'dragonbound.settings.v1';

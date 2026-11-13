@@ -42,7 +42,7 @@ export class Menu {
   open = false;
   private root: Phaser.GameObjects.Container;
   private tab: TabId = 'inv'; private idx = -1; private rows: Row[] = []; private scroll = 0;
-  private skip = false; private repeat = 0; private capture: string | null = null; private dragonIdx = 0; private status = '';
+  private skip = false; private repeat = 0; private capture: string | null = null; private dragonIdx = 0; private status = ''; private act: DragonRecord | null = null; private confirmRelease = false;
   private hit: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
 
   constructor(private scene: Phaser.Scene, private touch: TouchControls, private onTitle: () => void) {
@@ -55,7 +55,7 @@ export class Menu {
   }
 
   show(tab?: string): void {
-    this.open = true; hud.inMenu = true; this.status = ''; this.skip = true;
+    this.open = true; hud.inMenu = true; this.status = ''; this.skip = true; this.act = null; this.confirmRelease = false;
     if (tab && TABS.some((t) => t[0] === tab)) this.tab = tab as TabId;
     this.idx = -1; this.scroll = 0; this.root.setVisible(true); audio.play('ui'); this.draw();
   }
@@ -65,7 +65,7 @@ export class Menu {
     this.open = false; hud.inMenu = false; this.root.setVisible(false); audio.play('uiBack'); saveSettings(); input.save();
   }
 
-  private setTab(t: TabId): void { this.tab = t; this.idx = -1; this.scroll = 0; this.status = ''; audio.play('ui'); this.draw(); }
+  private setTab(t: TabId): void { this.act = null; this.confirmRelease = false; this.tab = t; this.idx = -1; this.scroll = 0; this.status = ''; audio.play('ui'); this.draw(); }
 
   // ── tab contents ─────────────────────────────────────────────────────────
   private buildRows(): Row[] {
@@ -78,8 +78,12 @@ export class Menu {
       case 'quests': return [...activeQuests().sort((a, b) => Number(b.main) - Number(a.main)), ...doneQuests()].map((q) => ({
         label: q.title, value: quest(q.id)?.done ? 'concluída' : q.main ? 'principal' : 'secundária', icon: quest(q.id)?.done ? 'star' : 'scroll', tint: quest(q.id)?.done ? COL.dim : q.main ? COL.gold : COL.text,
         hint: q.id, select: () => { if (!quest(q.id)?.done && game.save.story) { game.save.story.tracked = q.id; this.status = `Acompanhando: ${q.title}`; } } }));
-      case 'dragons': return this.known().map((r, i) => ({ label: r.met && (r.observed > 0.25 || r.bonded) ? r.name : '???', value: STAGE_LABEL[bondStage(r)], icon: 'el_' + SPECIES[r.genes.species].element, tint: r.genes.id === game.save.companion ? COL.gold : r.bonded ? COL.teal : COL.text,
-        select: () => { this.dragonIdx = i; if (r.bonded && game.save.companion !== r.genes.id) { game.save.companion = r.genes.id; r.follow = true; this.status = `${r.name} agora é seu companheiro.`; audio.play('bond', 0.4); } } }));
+      case 'dragons': {
+        if (this.act) return this.dragonActions(this.act);
+        return this.known().map((r, i) => ({ label: r.met && (r.observed > 0.25 || r.bonded) ? r.name : '???', value: r.bonded ? game.partyStatus(r) : STAGE_LABEL[bondStage(r)], icon: 'el_' + SPECIES[r.genes.species].element,
+          tint: r.genes.id === game.save.companion ? COL.gold : r.kept ? COL.dim : r.bonded ? COL.teal : COL.text,
+          select: () => { this.dragonIdx = i; if (r.bonded) { this.act = r; this.confirmRelease = false; this.idx = 0; this.status = ''; } } }));
+      }
       case 'map': return [];
       case 'options': return [
         vol('master', 'Volume geral'), vol('music', 'Música'), vol('sfx', 'Efeitos'), vol('ambience', 'Ambiente'), vol('voices', 'Vozes dos dragões'),
@@ -87,6 +91,8 @@ export class Menu {
         { label: 'Partículas', value: pct(settings.particles), adjust: (d) => { settings.particles = Phaser.Math.Clamp(Math.round((settings.particles + d * 0.25) * 4) / 4, 0.25, 1); saveSettings(); } },
         { label: 'Limite de FPS', value: `${settings.fpsCap}`, adjust: () => { settings.fpsCap = settings.fpsCap === 60 ? 30 : 60; this.scene.game.loop.setFPSLimit(settings.fpsCap); saveSettings(); } },
         { label: 'Mostrar FPS', value: settings.showFps ? 'Sim' : 'Não', adjust: () => { settings.showFps = !settings.showFps; saveSettings(); } },
+        { label: 'Dragões seguindo (máx.)', value: `${game.maxFollowers}`, adjust: (d) => { settings.maxFollowers = Phaser.Math.Clamp(game.maxFollowers + d, 1, 6); saveSettings(); const kept = game.enforceParty(); this.status = kept.length ? `Guardados por excesso: ${kept.map((r) => r.name).join(', ')}` : `Até ${game.maxFollowers} dragão(ões) podem te seguir.`; } },
+        { label: 'Câmera de voo dinâmica', value: pct(settings.flightCam), adjust: (d) => { settings.flightCam = Phaser.Math.Clamp(Math.round((settings.flightCam + d * 0.5) * 2) / 2, 0, 1); saveSettings(); } },
         { label: 'Tremor de tela', value: pct(settings.screenShake), adjust: (d) => { settings.screenShake = Phaser.Math.Clamp(Math.round((settings.screenShake + d * 0.5) * 2) / 2, 0, 1); saveSettings(); } },
         { label: 'Controles na tela', value: { auto: 'Automático', on: 'Sempre', off: 'Nunca' }[settings.touchEnabled], adjust: (d) => { const o = ['auto', 'on', 'off'] as const; settings.touchEnabled = o[(o.indexOf(settings.touchEnabled) + d + 3) % 3]; saveSettings(); } },
         { label: 'Tamanho dos botões', value: pct(settings.touchScale), adjust: (d) => { settings.touchScale = Phaser.Math.Clamp(Math.round((settings.touchScale + d * 0.1) * 10) / 10, 0.7, 1.5); this.touch.layout(); saveSettings(); } },
@@ -115,6 +121,28 @@ export class Menu {
       ];
     }
   }
+  /** Orders for one bonded dragon: main mount, follow / wait, keep (lives free), release (undo the bond). */
+  private dragonActions(r: DragonRecord): Row[] {
+    const back = (msg: string): void => { this.act = null; this.confirmRelease = false; this.status = msg; this.idx = this.known().indexOf(r); };
+    const rows: Row[] = [];
+    const following = r.follow && !r.kept, n = game.party().length;
+    if (game.save.companion !== r.genes.id) rows.push({ label: 'Principal', icon: 'star', hint: 'Torna este o dragão principal: o que você monta e que viaja ao seu lado.', select: () => {
+      if (!following) { const err = game.callBack(r); if (err) { this.status = err; audio.play('deny'); return; } }
+      game.save.companion = r.genes.id; audio.play('bond', 0.4); back(`${r.name} agora é seu dragão principal.`);
+    } });
+    if (!following) rows.push({ label: r.kept ? 'Chamar' : 'Seguir', icon: 'wing', hint: `${r.kept ? 'Chama de volta: ele voa até você, de onde estiver.' : 'Volta a te seguir.'} Grupo: ${n}/${game.maxFollowers}.`, select: () => {
+      const err = game.callBack(r); if (err) { this.status = err; audio.play('deny'); return; }
+      audio.play('bond', 0.4); back(r.kept ? `${r.name} foi chamado.` : `${r.name} está vindo até você.`);
+    } });
+    if (following) rows.push({ label: 'Esperar', icon: 'scroll', hint: 'Fica parado onde está até você assobiar perto dele.', select: () => { r.follow = false; r.kept = false; back(`${r.name} vai esperar onde está. Assobie perto dele para voltar a seguir.`); } });
+    if (!r.kept) rows.push({ label: 'Guardar', icon: 'el_nature', hint: 'Para de seguir e vive a vida dele por aqui (come, explora, dorme). Continua vinculado; chame quando quiser.', select: () => { game.keep(r); back(`${r.name} foi guardado. Ele vai viver por conta própria; chame-o quando quiser.`); } });
+    rows.push({ label: this.confirmRelease ? 'Confirmar?' : 'Libertar', icon: 'el_storm', tint: COL.red, hint: 'Desfaz o vínculo: ele volta a ser selvagem (mas lembra de você).', select: () => {
+      if (!this.confirmRelease) { this.confirmRelease = true; this.status = `Libertar ${r.name}? Ele volta a ser selvagem e o vínculo se perde. Confirme de novo.`; return; }
+      game.release(r); audio.play('uiBack'); back(`${r.name} voltou à vida selvagem.`);
+    } });
+    rows.push({ label: 'Voltar', hint: 'Voltar à lista de dragões.', select: () => back('') });
+    return rows;
+  }
   private known(): DragonRecord[] { return Object.values(game.save.dragons).filter((r) => r.met || r.bonded).sort((a, b) => Number(b.bonded) - Number(a.bonded) || b.trust - a.trust); }
 
   private startCapture(a: Action, pad: boolean): void {
@@ -132,7 +160,8 @@ export class Menu {
     const inp = input; this.repeat -= dt;
     const nav = (a: Action): boolean => inp.pressed(a) || (inp.down(a) && this.repeat <= 0);
     let dirty = false;
-    if (inp.pressed('pause') || inp.pressed('dash')) { this.hide(); return; }
+    if (inp.pressed('pause') || inp.pressed('dash')) { if (this.act) { const r = this.act; this.act = null; this.confirmRelease = false; this.status = ''; this.idx = this.known().indexOf(r); this.draw(); audio.play('uiBack'); return; } this.hide(); return; }
+    if (this.act && (inp.pressed('down') || inp.pressed('up'))) { this.status = ''; this.confirmRelease = false; }
     if (nav('down')) { this.idx = Math.min(this.rows.length - 1, this.idx + 1); this.repeat = inp.pressed('down') ? 0.3 : 0.09; dirty = true; }
     else if (nav('up')) { this.idx = Math.max(-1, this.idx - 1); this.repeat = inp.pressed('up') ? 0.3 : 0.09; dirty = true; }
     else if (nav('left') || nav('right')) {
@@ -143,7 +172,7 @@ export class Menu {
       const r = this.rows[this.idx];
       if (r?.select) { r.select(); dirty = true; } else if (r?.adjust) { r.adjust(1); dirty = true; }
     }
-    if (this.tab === 'dragons' && this.idx >= 0 && this.dragonIdx !== this.idx) { this.dragonIdx = this.idx; dirty = true; }
+    if (this.tab === 'dragons' && !this.act && this.idx >= 0 && this.dragonIdx !== this.idx) { this.dragonIdx = this.idx; dirty = true; }
     if (dirty && this.open) { if (!this.capture) audio.play('ui', 0.5); this.draw(); }
   }
 
@@ -188,7 +217,7 @@ export class Menu {
       add(txt(sc, x, y - 2, r.label, on ? 0xffffff : r.tint ?? COL.text));
       if (r.value) add(txt(sc, listX + listW, y - 2, (r.adjust && on ? '< ' : '') + r.value + (r.adjust && on ? ' >' : ''), on ? COL.gold : COL.dim).setOrigin(1, 0));
       this.hit.push({ x: listX - 3, y, w: listW + 6, h: LINE, fn: () => {
-        if (this.idx !== i) { this.idx = i; if (this.tab === 'dragons') this.dragonIdx = i; if (!r.adjust) r.select?.(); audio.play('ui', 0.5); }
+        if (this.idx !== i) { this.idx = i; if (this.tab === 'dragons' && !this.act) this.dragonIdx = i; if (!r.adjust) r.select?.(); audio.play('ui', 0.5); }
         else if (r.adjust) r.adjust(sc.input.activePointer.x > listX + listW * 0.8 ? 1 : sc.input.activePointer.x > listX + listW * 0.55 ? -1 : 1); else r.select?.();
         if (this.open) this.draw();
       } });
@@ -211,7 +240,8 @@ export class Menu {
       }
     } else if (this.tab === 'dragons') this.drawDragon(add, rx, listY, rw);
     else if (this.tab === 'map') this.drawMap(add, mx + 8, top + 24, pw - 16, H - top - 30 - 26);
-    add(txt(sc, mx + 8, H - 24, this.status || this.helpLine(), this.status ? COL.gold : COL.dim));
+    const foot = this.status || (this.act && this.rows[this.idx]?.hint) || '';
+    add(txt(sc, mx + 8, H - 24, foot ? wrap(sc, foot, pw - 16) : this.helpLine(), foot ? COL.gold : COL.dim).setOrigin(0, foot && foot.length > 70 ? 0.4 : 0));
   }
 
   private helpLine(): string {
@@ -220,7 +250,7 @@ export class Menu {
   }
 
   private drawDragon(add: <T extends Phaser.GameObjects.GameObject>(o: T) => T, x: number, y: number, w: number): void {
-    const sc = this.scene, list = this.known(), r = list[Math.min(this.dragonIdx, list.length - 1)];
+    const sc = this.scene, list = this.known(), r = this.act ?? list[Math.min(this.dragonIdx, list.length - 1)];
     if (!r) { add(txt(sc, x - w * 0.4, y, wrap(sc, 'Nenhum dragão registrado ainda. Observe-os em silêncio para aprender sobre cada um.', w * 1.3), COL.dim)); return; }
     const ph = game.phenotype(r), sp = SPECIES[r.genes.species], know = r.bonded ? 1 : r.observed;
     const key = DragonTextures.ensure(sc, r);
@@ -232,6 +262,7 @@ export class Menu {
     L.push([`${{ egg: 'Ovo', hatchling: 'Filhote', juvenile: 'Jovem', adult: 'Adulto' }[st]}, ${r.genes.sex === 'f' ? 'fêmea' : 'macho'}`, COL.dim]);
     L.push([`Linhagem ${r.genes.lineage.line}, geração ${r.genes.lineage.generation}`, COL.dim]);
     L.push([`Vínculo: ${STAGE_LABEL[bondStage(r)]}  (${Math.round(r.trust)}%)`, COL.teal]);
+    if (r.bonded) L.push([`${game.partyStatus(r)}${r.kept ? ` em ${allSites(game.save.worldSeed).find((x) => x.id === r.island)?.name ?? r.island}` : ''}  ·  grupo ${game.party().length}/${game.maxFollowers}`, r.kept ? COL.dim : COL.gold]);
     if (r.bonded) L.push([`Treino ${Math.round(r.training)}%  ·  ${game.canRide(r) ? 'pode ser montado' : ph.rideable ? 'ainda não montável' : 'porte pequeno'}`, COL.text]);
     if (know > 0.3) { const tr = TRAITS.map((t) => [t, ph.personality[t] + (r.drift[t] ?? 0)] as const).sort((a, b) => Math.abs(b[1] - 0.5) - Math.abs(a[1] - 0.5)).slice(0, know > 0.7 ? 4 : 2); L.push([tr.map(([t, v]) => TRAIT_WORDS[t][v > 0.5 ? 1 : 0]).join(', '), COL.text]); }
     else L.push(['Temperamento: observe mais…', COL.dim]);

@@ -1,6 +1,6 @@
 # PROGRESS
 
-Última atualização: sessão 3 (Vigiamar, história, chefes e atualização automática).
+Última atualização: sessão 3 (Vigiamar, história, chefes, atualização automática, grupo de dragões e imersão de voo).
 
 ## Versão 0.2 beta (sessão 2)
 - Voo: a pirueta foi removida; **dash** em linha reta (ilha e mar) com rastro, invencibilidade breve e custo de fôlego.
@@ -31,6 +31,26 @@
 - O service worker usa `registerType: 'autoUpdate'` com `skipWaiting` e `clientsClaim`. Depois de um deploy, o app instalado (celular ou desktop) baixa a versão nova em segundo plano. Ele confere ao abrir, ao voltar para a aba e a cada 20 min, salva o jogo e recarrega uma vez. **Não é preciso reinstalar o app.**
 - `vercel.json` manda `sw.js`, `index.html`, o manifest e `registerSW.js` sem cache, para a checagem sempre ver o deploy novo. Os assets com hash continuam com cache imutável.
 - No primeiro acesso a página não recarrega: só quando um worker novo substitui um antigo.
+
+## Grupo de dragões (sessão 3)
+- Vários dragões vinculados podem seguir o jogador ao mesmo tempo. O limite vai de 1 a 6 (padrão 3) e fica em **Opções → Dragões seguindo (máx.)**. Se o limite baixar, os excedentes ficam guardados onde estão.
+- **Menu Dragões:** confirmar num dragão vinculado abre as ações:
+  - **Principal:** vira a montaria e passa a viajar ao seu lado.
+  - **Seguir / Chamar:** um dragão guardado em outra ilha "ouve o chamado" e chega voando.
+  - **Esperar:** fica parado até você assobiar.
+  - **Guardar:** para de seguir e vive a própria vida (come, explora, dorme) onde está, ainda vinculado.
+  - **Libertar:** desfaz o vínculo (pede confirmação). O dragão volta ao modo selvagem, com confiança 45 e a lembrança de ter sido libertado.
+- O grupo viaja junto: troca de camada, saída para o mar, chegada em outra ilha (chega voando ao lado da montaria), atende ao assobio e ataca quando você manda. No mar aberto, os companheiros voam em **formação em V** atrás da montaria; de barco, circulam no alto.
+- Quando um vínculo novo passa do limite, o dragão fica guardado e um aviso explica.
+- Dados: `DragonRecord.kept`; helpers em `GameState` (`party`, `callBack`, `keep`, `release`, `enforceParty`); evento `partyChanged`. Testes em `tests/party.test.ts`.
+
+## Imersão de voo (sessão 3)
+- A câmera afasta com a velocidade (até ~13%, mais no mergulho e no dash), trepida no voo rasante e no mergulho rápido, e sobe um pouco a cada batida de asa.
+- Vinheta escura nas bordas em alta velocidade.
+- **Atravessar nuvens** enche a tela de névoa e deixa um rastro de gotículas.
+- **Voo rasante** (perto do chão ou da água, rápido) levanta poeira, ou spray e respingos na água, com som de vento.
+- No mar, a câmera aproxima das ondas no mergulho, com vinheta em velocidade máxima.
+- **Opções → Câmera de voo dinâmica** (0/50/100%) desliga ou suaviza tudo isso. O tremor também respeita a opção "Tremor de tela".
 
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
@@ -69,7 +89,7 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
   (ou GitHub → Settings → Applications → Vercel → incluir `dragonbound`). O `vercel.json` já configura o build.
 
 ## Resultados de teste (sessão 1)
-- `npm test`: 38/38 (sessão 3).
+- `npm test`: 39/39 (sessão 3).
 - `npm run e2e`: 43/43 (sessão 3; inclui altitude em voo e troca de camadas; a abertura do Tor é pulada no teste). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
 - Desempenho: ~57 fps no Chromium headless com GL por software, 7 entidades. **Isso não representa aparelhos reais**; nenhum dispositivo físico foi medido.
 

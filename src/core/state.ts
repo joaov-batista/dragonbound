@@ -7,6 +7,7 @@ import { hashInts, hashString } from '../utils/rng';
 import type { IslandData, ItemId } from '../world/islands/types';
 import { DAY_LENGTH } from './constants';
 import { events } from './events';
+import { settings } from './settings';
 
 export const ITEM_NAMES: Record<ItemId, string> = { berry: 'Frutas silvestres', fish: 'Peixe', meat: 'Carne', herb: 'Erva curativa', shroom: 'Cogumelo-luz', ember: 'Cristal de brasa', shell: 'Concha brilhante', relic: 'Fragmento antigo', coin: 'Moedas' };
 export const FOOD_ITEMS: ItemId[] = ['berry', 'fish', 'meat', 'herb', 'shroom', 'ember'];
@@ -93,6 +94,53 @@ class GameState {
   dragonsOn(island: string): DragonRecord[] { return Object.values(this.save.dragons).filter((r) => r.island === island); }
   get companion(): DragonRecord | null { return this.save.companion ? this.save.dragons[this.save.companion] ?? null : null; }
   bondedList(): DragonRecord[] { return Object.values(this.save.dragons).filter((r) => r.bonded); }
+
+  // ── the party: bonded dragons that travel with the player ────────────────
+  /** How many bonded dragons may follow at once (Options → Dragões seguindo). */
+  get maxFollowers(): number { return Math.max(1, Math.min(6, Math.round(settings.maxFollowers ?? 3))); }
+  /** Bonded dragons following the player (companion first). Kept dragons live on their own and are not in it. */
+  party(): DragonRecord[] {
+    const c = this.companion;
+    return this.bondedList().filter((r) => r.follow && !r.kept).sort((a, b) => Number(b === c) - Number(a === c));
+  }
+  /** Status word for a bonded dragon. */
+  partyStatus(r: DragonRecord): string {
+    if (!r.bonded) return '';
+    return r.kept ? 'Guardado' : r.follow ? (r === this.companion ? 'Principal' : 'Seguindo') : 'Esperando';
+  }
+  /** Ask a bonded dragon to follow (calls a kept one back). Returns an explanation when the party is full. */
+  callBack(r: DragonRecord): string | null {
+    if (!r.bonded) return null;
+    const following = this.party().filter((x) => x !== r).length;
+    if (following >= this.maxFollowers) return `Limite de ${this.maxFollowers} dragão(ões) seguindo. Guarde outro ou aumente o limite em Opções.`;
+    const wasKept = !!r.kept;
+    r.kept = false; r.follow = true;
+    if (!this.companion || this.companion.kept || !this.companion.bonded) this.save.companion = r.genes.id;
+    events.emit('partyChanged', { id: r.genes.id, how: wasKept ? 'summon' : 'follow' });
+    return null;
+  }
+  /** Keep a dragon: it stops following and lives freely where it is now. */
+  keep(r: DragonRecord): void {
+    if (!r.bonded) return;
+    r.kept = true; r.follow = false; r.homeX = r.x; r.homeY = r.y; r.homeR = Math.max(r.homeR, 220);
+    if (this.save.companion === r.genes.id) this.save.companion = this.party()[0]?.genes.id ?? r.genes.id;
+    events.emit('partyChanged', { id: r.genes.id, how: 'keep' });
+  }
+  /** Undo the bond: the dragon goes back to the wild, remembering the player kindly. */
+  release(r: DragonRecord): void {
+    if (!r.bonded) return;
+    r.bonded = false; r.follow = false; r.kept = false; r.trust = Math.min(r.trust, 45); r.fear = 0; r.training = 0;
+    r.homeX = r.x; r.homeY = r.y; r.homeR = Math.max(r.homeR, 200);
+    r.memories.push({ day: this.save.day, kind: 'freed', v: 0.6 }); if (r.memories.length > 24) r.memories.shift();
+    if (this.save.companion === r.genes.id) this.save.companion = this.party()[0]?.genes.id ?? this.bondedList()[0]?.genes.id ?? null;
+    events.emit('partyChanged', { id: r.genes.id, how: 'release' });
+  }
+  /** Make sure no more than maxFollowers follow (extra ones, newest last, are kept where they stand). Returns the kept ones. */
+  enforceParty(): DragonRecord[] {
+    const p = this.party(), out: DragonRecord[] = [];
+    for (const r of p.slice(this.maxFollowers)) { this.keep(r); out.push(r); }
+    return out;
+  }
 
   /** Lay an egg from two bonded adults of opposite sex; hatches after ~half a day. */
   layEgg(a: DragonRecord, b: DragonRecord, island: string, x: number, y: number): boolean {

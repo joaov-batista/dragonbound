@@ -74,7 +74,7 @@ export class DragonMind {
     if (r.bonded) {
       const needy = r.hunger > 0.9 || r.energy < 0.08;
       s.follow = r.follow ? (needy ? 0.4 : 0.92 - t.independence * 0.22) : 0;
-      s.stay = r.follow ? 0 : 0.8;
+      s.stay = r.follow || r.kept ? 0 : 0.8; // a kept dragon lives its own life (explore, forage, sleep)
       if (p.threat && (pl.threatened || p.threat.dist < 70)) s.protect = t.protectiveness * 0.8 + t.loyalty * 0.4 + t.courage * 0.2 + this.anger * 0.3;
       if (pl.dist < 90 && r.energy > 0.4 && !pl.mounted && !p.threat) s.play = (t.sociability * 0.5 + (this.ph.likes.includes('play') ? 0.25 : 0)) * (this.rng() < 0.25 ? 1.6 : 0.6);
     } else if (p.threat && p.threat.dist < 60) { s.attack = Math.max(s.attack ?? 0, t.aggression * 0.7 + t.courage * 0.4); s.flee = Math.max(s.flee ?? 0, (1 - t.courage) * 0.8); }
