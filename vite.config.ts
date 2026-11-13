@@ -3,7 +3,14 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
-  build: { target: 'es2020', chunkSizeWarningLimit: 2500, rollupOptions: { output: { manualChunks: (id) => (id.includes('node_modules/phaser') ? 'phaser' : undefined) } } },
+  build: {
+    target: 'es2020', chunkSizeWarningLimit: 2500,
+    rollupOptions: {
+      // two games: the 2D original (/) and the 3D open-world version (/3d/)
+      input: { main: 'index.html', world3d: '3d/index.html' },
+      output: { manualChunks: (id) => (id.includes('node_modules/phaser') ? 'phaser' : id.includes('node_modules/three') ? 'three' : undefined) },
+    },
+  },
   server: { host: true },
   plugins: [
     VitePWA({
@@ -25,6 +32,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,json,xml,webmanifest}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         cleanupOutdatedCaches: true, clientsClaim: true, skipWaiting: true,
+        navigateFallbackDenylist: [/^\/3d/],
       },
     }),
   ],

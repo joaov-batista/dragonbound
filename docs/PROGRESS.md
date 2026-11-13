@@ -98,6 +98,33 @@ Os golpes ficam em `src/dragons/DragonCombat.ts` e valem para a montaria e para 
   - Natureza: ira da floresta, que também cura
 - Inimigos abatidos por dragões explodem.
 
+## Dragonbound 3D: mundo aberto em terceira pessoa (sessão 3, protótipo)
+Pixel art em mundo 3D, no estilo HD-2D: personagens, dragões, árvores e efeitos são recortes em pixel art que ficam de frente para a câmera, num terreno 3D. A página é `/3d/` (`3d/index.html`, código em `src3d/`, Three.js 0.187 fixo). O jogo 2D continua em `/`.
+- **Mundo** (`world.ts`):
+  - uma ilha de cerca de 1,5 km, cercada de mar até o horizonte, com campina plana (início), colinas suaves, florestas, praias e uma montanha com neve;
+  - terreno low-poly com textura em pixel, árvores e moitas em quads cruzados instanciados, nuvens, névoa e céu;
+  - renderização em 300 px de altura, ampliada sem suavização.
+- **Vistas** (`views.ts`): frente e costas novas para o herói e para cada dragão (gerados a partir do fenótipo), voo visto de trás com e sem cavaleiro. A vista lateral vem dos painters do 2D. `billboard.ts` escolhe frente, costas ou lado pelo ângulo da câmera.
+- **Herói** (`hero3d.ts`): movimento relativo à câmera, andar devagar (Shift), pulo, oferecer comida (segurar F), carinho (E).
+- **Dragões** (`dragon3d.ts`):
+  - 29 selvagens por região: marulhos na costa, folhascas nas florestas, cinzais e troviscos na montanha, geadinos no pico, pedruscos nas encostas;
+  - pastam, vagam, fogem, voam alto pela ilha, se aproximam e comem da mão, e esperam o vínculo;
+  - usam as regras de confiança e medo de `Bond` do jogo 2D;
+  - vinculados seguem o herói (a pé ou voando).
+- **Montar e voar** (`main.ts`):
+  - R monta; Espaço decola;
+  - no ar: o mouse ou A/D giram; Q/Espaço sobem e C desce; W/S mudam a velocidade; K dá dash;
+  - câmera atrás do dragão, que inclina nas curvas, com campo de visão maior em alta velocidade;
+  - rasante levanta poeira ou spray; pouso automático quando o dragão está lento perto do chão.
+- **Combate aéreo** (`fx3d.ts`):
+  - esquadrões de planadores dos Caçadores com arpões;
+  - tiro elemental com mira automática (clique ou I), bola de poder ao segurar e tapa de asa (J);
+  - esquiva perfeita com câmera lenta;
+  - planadores abatidos caem em espiral e explodem.
+- **Interface:** HUD em DOM com pouco texto; controles de toque (analógico, arrastar para olhar e botões).
+- **Save:** o progresso fica em `localStorage` (`dragonbound3d.v1`).
+- **Não medido:** no Chromium headless com GL por software roda a cerca de 7 fps (130 mil triângulos, 73 draw calls). Não foi medido em GPU nem em celular.
+
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
 

@@ -9,7 +9,7 @@ import { pixToTexture } from './runtime';
  */
 const LEATHER = ramp(0x8a3a2a), BONE = ramp(0xd8ccb0), STEEL = ramp(0x8a9098), WOOD = ramp(0x6a4a30), CANVAS = ramp(0xc4b48e), DARK = 0x1a1418, RED = ramp(0xb8302a);
 
-function raider(p: Pix, ox: number, flex: number, aiming: boolean): void {
+export function raider(p: Pix, ox: number, flex: number, aiming: boolean): void {
   // glider: bone spar + leather membrane (tips sag when flexed)
   const cx = ox + 28, sy = 10;
   for (const s of [-1, 1]) {
