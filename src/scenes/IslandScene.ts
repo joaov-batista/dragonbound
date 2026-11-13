@@ -7,7 +7,8 @@ import { hud } from '../core/hud';
 import { settings } from '../core/settings';
 import { FOOD_ITEMS, ITEM_NAMES, game } from '../core/state';
 import type { ProjectileSpec, World, StrikeOpts } from '../core/world';
-import { cancelCharge } from '../dragons/DragonCombat';
+import { EL_COLOR, cancelCharge } from '../dragons/DragonCombat';
+import { SkyRaider, Warship } from '../entities/AirForce';
 import { Dragon } from '../dragons/Dragon';
 import { ceilingY, updateRide } from '../dragons/Flight';
 import type { Element, FoodId } from '../dragons/genetics/types';
@@ -18,6 +19,7 @@ import { Npc } from '../entities/Npc';
 import { flag, setFlag, updateQuests } from '../story/story';
 import { buildInteractables, type Interactable } from '../entities/Interactables';
 import { input } from '../input/InputManager';
+import { keyLabel } from '../input/actions';
 import { rectsOverlap, type Rect } from '../physics/Body';
 import { Cell, Liquid, type TileGrid } from '../physics/TileGrid';
 import { Player } from '../player/Player';
@@ -62,7 +64,8 @@ export class IslandScene extends Phaser.Scene {
   private entry!: IslandEntry; private stop = 0; private mount: Dragon | null = null; private focus: Dragon | null = null;
   private buildQueue: Dragon[] = []; private promptT = 0; private saveT = 45; private hatchT = 2; private foodT = 0; private leaving = false;
   private foodCache = new Map<Dragon, { x: number; y: number; thing: Interactable } | null>();
-  private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private lookX = 0; private fz = 1; private mistA = 0; private inCloud = false; private vign!: Phaser.GameObjects.Image; private mist!: Phaser.GameObjects.Rectangle; private fallT = 0; private caveK = 0; private camY = 0;
+  private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private camTrack: { p: { x: number; y: number }; until: number } | null = null; private airT = 18; private warship: Warship | null = null; private elMark = new Map<EnemyLike, { el: Element; t: number }>(); private timeK = 1; private slowT = 0; private counterT = 0; private surgeTold = false;
+  private lookX = 0; private fz = 1; private mistA = 0; private inCloud = false; private vign!: Phaser.GameObjects.Image; private mist!: Phaser.GameObjects.Rectangle; private fallT = 0; private caveK = 0; private camY = 0;
 
   constructor() { super('Island'); }
   init(data: IslandEntry): void { this.entry = data; }
@@ -73,7 +76,7 @@ export class IslandScene extends Phaser.Scene {
     game.populate(this.island);
     game.save.player.island = this.island.id;
     if (!game.save.ocean.discovered.includes(this.island.id)) game.save.ocean.discovered.push(this.island.id);
-    this.lanes = []; this.mount = null; this.focus = null; this.leaving = false; this.foodCache.clear(); this.comboMark.clear(); this.buildQueue = [];
+    this.lanes = []; this.mount = null; this.focus = null; this.leaving = false; this.warship = null; this.elMark.clear(); this.slowT = 0; this.timeK = 1; this.counterT = 0; this.airT = 18; this.foodCache.clear(); this.comboMark.clear(); this.buildQueue = [];
 
     // ── cameras: sky (backdrop) → one per lane, back to front → overlay (tint, weather, fades) ──
     const W0 = this.scale.width, H0 = this.scale.height;
@@ -358,15 +361,19 @@ export class IslandScene extends Phaser.Scene {
   }
   /** Damage resolution is per lane: nothing reaches across depth. */
   private strikeIn(L: Lane, rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown, opts?: StrikeOpts): number {
-    let n = 0;
+    let n = 0, countered = false;
     const hits = (b: { x: number; y: number; w: number; h: number }): boolean => rectsOverlap(rect, { x: b.x - b.w / 2, y: b.y - b.h, w: b.w, h: b.h });
     if (friendly) {
       for (const e of L.enemies) if (e.alive && hits(e.body)) {
         let d = dmg;
         const mark = this.comboMark.get(e) ?? -9;
         if (source === 'player' && this.time.now - mark < 1400) { d *= 2; L.vfx.play('crit', e.body.x, e.body.y, { scale: 0.8 }); this.comboMark.delete(e); }
+        if (source === 'dragon' && this.counterT > 0) { d *= 2; L.vfx.play('crit', e.body.x, e.body.y - e.body.h * 0.5, { scale: 0.9 }); countered = true; }
         if (e.hurt(d, fromX, element, source, source === 'player' ? this.player.attackId : undefined)) {
-          n++; if (source === 'dragon') this.comboMark.set(e, this.time.now);
+          n++; if (source === 'dragon') { this.comboMark.set(e, this.time.now); this.addSurge(0.035); }
+          if (source === 'dragon' && element !== 'physical' && e.alive) this.react(L, e, element);
+          if (!e.alive && source === 'dragon' && e.kind !== 'warship' && e.kind !== 'skyraider') { L.vfx.play('explosion', e.body.x, e.body.y + 14, { scale: 0.45, add: true }); L.vfx.puff(e.body.x, e.body.y - 10, 0xffb040, 8, { speed: 140, gravity: 120, spread: 360, life: 400, add: true }); this.shake(2, 120); }
+          if (!e.alive) { this.elMark.delete(e); if (source === 'dragon') this.addSurge(0.1); }
           if (opts && e.alive && e.kind !== 'anchor' && e.kind !== 'alpha') { const dir = Math.sign(e.body.x - fromX || 1); if (opts.knock) e.body.vx = dir * 130 * opts.knock; if (opts.launch) e.body.vy = -opts.launch; }
           if (!e.alive) this.onEnemyDead(e);
         }
@@ -375,10 +382,15 @@ export class IslandScene extends Phaser.Scene {
         if (this.hitOnce(d)) { d.hurt(dmg, fromX, element, 'player'); n++; }
       }
     } else {
-      const pl = this.player;
-      if (L === this.lane && pl.alive && hits(pl.body) && !this.mount) { if (this.damagePlayer(1 + (dmg > 2 ? 1 : 0), fromX)) n++; }
-      for (const d of L.dragons) if (d !== exclude && d.rec.bonded && d.ready && hits(d.body)) { d.hurt(dmg * 0.5, fromX, element, source === 'enemy' ? 'enemy' : 'dragon'); n++; }
+      const pl = this.player, mb = this.mount?.body;
+      // riders are hit too (through the mount's body); a dash at the last moment is a perfect dodge
+      if (L === this.lane && pl.alive && (mb ? hits(mb) || hits(pl.body) : hits(pl.body))) {
+        if (this.mount && this.dodgeWindow()) this.perfectDodge();
+        else if (this.damagePlayer(1 + (dmg > 2 ? 1 : 0), fromX)) { n++; if (this.mount) { this.mount.hitFlash = 0.14; this.shake(3, 140); } }
+      }
+      for (const d of L.dragons) if (d !== exclude && d.rec.bonded && d.ready && !d.ridden && hits(d.body)) { d.hurt(dmg * 0.5, fromX, element, source === 'enemy' ? 'enemy' : 'dragon'); n++; }
     }
+    if (countered) this.counterT = 0;
     return n;
   }
   private hitIds = new Map<Dragon, number>();
@@ -564,7 +576,13 @@ export class IslandScene extends Phaser.Scene {
 
   // ── main loop ───────────────────────────────────────────────────────────
   override update(time: number, delta: number): void {
-    const dt = Math.min(delta / 1000, 1 / 30);
+    // slow motion after a perfect dodge or during an ultimate: real time drives the timer, game time is scaled
+    const rdt = Math.min(delta / 1000, 1 / 30);
+    if (this.slowT > 0) this.slowT -= rdt;
+    this.timeK += ((this.slowT > 0 ? 0.3 : 1) - this.timeK) * Math.min(1, rdt * 12);
+    if (Math.abs(this.timeK - 1) < 0.01) this.timeK = 1;
+    this.tweens.timeScale = this.timeK; this.anims.globalTimeScale = this.timeK;
+    const dt = rdt * this.timeK;
     hud.fps = this.game.loop.actualFps; hud.entities = this.lanes.reduce((n, l) => n + l.dragons.length + l.enemies.length, 0); hud.fxCount = this.lanes.reduce((n, l) => n + l.vfx.activeCount, 0);
     this.tagCam = this.lane.cam;
     input.update();
@@ -589,6 +607,7 @@ export class IslandScene extends Phaser.Scene {
     // player / mount
     if (this.mount) {
       if (input.pressed('mount')) this.doDismount();
+      else if (input.pressed('parry') && hud.surge >= 1) this.ultimate();
       else { updateRide(this.mount, pl, this.worldRef, dt, this.island.weather === 'storm'); hud.stamina = this.mount.flight.stamina; hud.staminaMax = this.mount.ph.stats.stamina; }
       pl.update(dt);
       const mb = this.mount?.body;
@@ -611,11 +630,14 @@ export class IslandScene extends Phaser.Scene {
     // enemies
     for (const e of this.enemies) {
       const r = e.update(dt, pb.x, pb.y, pl.alive);
-      if (r.contact) this.damagePlayer(e.contactDmg ?? 1, e.body.x, e);
+      if (r.contact) { if (this.mount && this.dodgeWindow()) this.perfectDodge(); else this.damagePlayer(e.contactDmg ?? 1, e.body.x, e); }
+      // the environment marks foes too: knocked into the sea they are wet, into lava they burn
+      if (e.alive && e.body.inLiquid !== Liquid.None && !this.elMark.has(e)) this.elMark.set(e, { el: e.body.inLiquid === Liquid.Lava ? 'fire' : 'water', t: this.time.now });
       if (r.shoot && e.kind === 'hunter') { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y - 4, vx: ((pb.x - c.x) / d) * 220, vy: ((pb.y - 12 - c.y) / d) * 220, dmg: 1, element: 'physical', friendly: false, fx: 'icelance', life: 1.4, scale: 0.35 }); audio.play('dash', 0.4); }
       else if (r.shoot) { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y, vx: ((pb.x - c.x) / d) * 150, vy: ((pb.y - 12 - c.y) / d) * 150, dmg: 1, element: 'storm', friendly: false, fx: 'sparkarc', life: 1.6, scale: 0.35 }); audio.play('zap', 0.5); }
     }
     if (this.enemies.some((e) => !e.alive)) this.enemies = this.enemies.filter((e) => e.alive);
+    this.airDirector(dt);
     if ((this.laneCheckT -= dt) <= 0) {
       this.laneCheckT = 0.25;
       const i = this.lanes.indexOf(this.lane), m = this.mount ? this.mount.body : pb, air = !!this.mount?.air || !m.onGround;
@@ -797,6 +819,143 @@ export class IslandScene extends Phaser.Scene {
     if (Math.floor(time / 500) !== Math.floor((time - dt * 1000) / 500)) this.applyAmbience(this.caveK);
   }
 
+  // ── air battles, elemental reactions, perfect dodge, Bond Surge ─────────────
+  /** Where each island's war balloon patrols (tile x). */
+  private static readonly WARSHIPS: Record<string, number> = { alvamar: 292, brasaviva: 196, trovao: 170 };
+
+  /** Spawns the island's war balloon when you fly near it, and raider squads during long flights. */
+  private airDirector(dt: number): void {
+    const pb = this.mount ? this.mount.body : this.player.body, L = this.lane, id = this.island.id;
+    this.counterT -= dt;
+    const wx = IslandScene.WARSHIPS[id];
+    const downed = flag('warship_' + id);
+    // war balloons are an air battle: they show up when you fly near (on Alvamar only after Bruto falls)
+    if (wx !== undefined && L.depth === 0 && !this.warship && this.mount?.air && (id !== 'alvamar' || flag('boss_bruto')) && (!downed || game.day - downed > 1)) {
+      const x = wx * TILE;
+      if (Math.abs(pb.x - x) < 900) {
+        const g = L.data.grid, ground = g.groundBelow(x, 0, g.h) ?? L.data.seaRow * TILE, ay = Math.max(ceilingY(L.world, x) + 120, Math.min(ground - 150, ground - 120));
+        this.tagCam = L.cam;
+        this.warship = new Warship(L.world, x + 400, ay, () => !!this.mount?.air, { spawnRaider: (rx, ry) => this.spawnRaider(rx, ry), downed: (k, dx, dy) => this.airDowned(k, dx, dy), track: (pt, ms) => { this.camTrack = { p: pt, until: this.time.now + ms }; } });
+        L.enemies.push(this.warship);
+        if (!flag('warship_seen')) { setFlag('warship_seen'); events.emit('toast', { text: 'Um Balão de Guerra dos Caçadores!', icon: 'star' }); }
+      }
+    }
+    if (this.warship && !this.warship.alive) this.warship = null;
+    // raider squads while you are up in the air
+    const raiders = L.enemies.filter((e) => e.kind === 'skyraider' && e.alive);
+    for (const r of raiders) if (Math.abs(r.body.x - pb.x) > 1100) { r.alive = false; (r as unknown as { sprite: Phaser.GameObjects.Sprite }).sprite?.destroy(); }
+    if (this.mount?.air && !this.arenaLock && !hud.boss) {
+      this.airT -= dt;
+      if (this.airT <= 0 && raiders.length < 2) {
+        this.airT = 26 + Math.random() * 18;
+        const side = Math.random() < 0.6 ? this.mount.facing : -this.mount.facing, n = 2 + (Math.random() < 0.4 ? 1 : 0);
+        for (let k = 0; k < n; k++) this.spawnRaider(pb.x + side * (300 + k * 40), pb.y - 60 + k * 40);
+        audio.play('whistle', 0.4);
+      }
+    }
+  }
+  private spawnRaider(x: number, y: number): void {
+    const L = this.lane; if (L.enemies.filter((e) => e.kind === 'skyraider' && e.alive).length >= 5) return;
+    this.tagCam = L.cam; L.enemies.push(new SkyRaider(L.world, x, y));
+  }
+  private airDowned(kind: string, x: number, y: number): void {
+    if (kind === 'warship-hit') { setFlag('warship_' + this.island.id, Math.max(0.01, game.day)); return; } // shot down: no new balloon today
+    if (kind !== 'warship') return;
+    const n = 40 + Math.floor(Math.random() * 20); game.addItem('coin', n); this.lane.vfx.floatText(x, y - 80, `+${n} moedas`, 0xf2c14e);
+    this.addSurge(0.35); audio.play('bond', 0.6);
+  }
+
+  /** Bond Surge: fills with your dragons' hits, kills, reactions and perfect dodges. */
+  private addSurge(k: number): void {
+    const was = hud.surge; hud.surge = Math.min(1, hud.surge + k);
+    const el = (this.mount ?? this.dragons.find((d) => d.rec === game.companion))?.ph.element; if (el) hud.surgeColor = EL_COLOR[el];
+    if (was < 1 && hud.surge >= 1 && !this.surgeTold) { this.surgeTold = true; events.emit('toast', { text: `Fúria do Vínculo pronta! [${keyLabel(input.bindings.keys.parry[0])}]`, icon: 'star' }); }
+  }
+
+  /** A dash that started a blink ago turns a hit into a perfect dodge. */
+  private dodgeWindow(): boolean { const f = this.mount?.flight; return !!f && f.dashT > -0.12; }
+  private perfectDodge(): void {
+    if (this.slowT > 0 || !this.mount) return;
+    const m = this.mount.body;
+    this.slowT = 0.6; this.counterT = 1.8; this.addSurge(0.2);
+    this.lane.vfx.play('parry', m.x, m.y - 20, { scale: 1.1, add: true }); this.lane.vfx.puff(m.x, m.y - 20, 0x9ff0ff, 12, { speed: 120, gravity: 0, spread: 360, life: 380, add: true });
+    this.impactFlash(140, 0x80e8ff); audio.play('parry', 1);
+    this.player.iframes = Math.max(this.player.iframes, 0.5);
+  }
+
+  /** Two different elements on the same foe within a few seconds set off a reaction. */
+  private react(L: Lane, e: EnemyLike, el: Element): void {
+    const now = this.time.now, mark = this.elMark.get(e);
+    if (!mark || mark.el === el || now - mark.t > 4000) { this.elMark.set(e, { el, t: now }); L.vfx.play('zap', e.body.x, e.body.y - e.body.h * 0.5, { scale: 0.35, tint: EL_COLOR[el], add: true }); return; }
+    this.elMark.delete(e);
+    const key = [mark.el, el].sort().join('+');
+    const R: Record<string, { name: string; fx: string; sc: number; r: number; dmg: number; col: number; stun?: number; launch?: number; chain?: boolean; heal?: boolean }> = {
+      'fire+nature': { name: 'Incêndio', fx: 'explosion', sc: 0.9, r: 74, dmg: 4, col: 0xff7020 },
+      'fire+water': { name: 'Vapor', fx: 'poof', sc: 1.4, r: 70, dmg: 3, col: 0xf0f4ff, stun: 1.4 },
+      'fire+ice': { name: 'Choque térmico', fx: 'iceshatter', sc: 1.2, r: 64, dmg: 5, col: 0xbff0ff },
+      'storm+water': { name: 'Eletrocução', fx: 'thunder', sc: 0.8, r: 150, dmg: 3, col: 0xc8b0ff, chain: true },
+      'ice+water': { name: 'Congelado', fx: 'frostnova', sc: 0.9, r: 64, dmg: 2, col: 0xbff0ff, stun: 2.6 },
+      'fire+storm': { name: 'Plasma', fx: 'explosion', sc: 1, r: 84, dmg: 5, col: 0xff90ff },
+      'ice+storm': { name: 'Granizo', fx: 'iceshatter', sc: 1.1, r: 80, dmg: 4, col: 0xd8f4ff },
+      'nature+water': { name: 'Florescer', fx: 'spore', sc: 1.2, r: 64, dmg: 2, col: 0x8fe07a, heal: true },
+    };
+    const x = R[key] ?? (key.includes('earth') ? { name: 'Estilhaços', fx: 'earthspike', sc: 0.9, r: 74, dmg: 4, col: 0xd0a868, launch: 320 } : { name: 'Reação', fx: 'crit', sc: 1, r: 60, dmg: 3, col: 0xffffff });
+    const cx = e.body.x, cy = e.body.y - e.body.h * 0.5;
+    L.vfx.play(x.fx, cx, cy + (x.fx === 'explosion' || x.fx === 'earthspike' ? 26 : 0), { scale: x.sc, add: x.fx !== 'poof' });
+    L.vfx.puff(cx, cy, x.col, 16, { speed: 170, gravity: 40, spread: 360, life: 480, add: true });
+    L.vfx.floatText(cx, cy - 26, x.name, x.col);
+    const targets = x.chain ? L.enemies.filter((o) => o.alive && Math.hypot(o.body.x - cx, o.body.y - e.body.y) < x.r) : [e];
+    if (x.chain) for (const o of targets) L.vfx.play('bolt', o.body.x, o.body.y, { scale: 0.7, add: true });
+    this.strikeIn(L, x.chain ? { x: 0, y: 0, w: 0, h: 0 } : { x: cx - x.r, y: cy - x.r, w: x.r * 2, h: x.r * 2 }, x.dmg, 'physical', true, cx, 'dragon', undefined, { knock: 2.2, launch: x.launch ?? 160 });
+    if (x.chain) for (const o of targets) if (o.alive) { o.hurt(x.dmg, cx, 'storm', 'dragon'); if (!o.alive) this.onEnemyDead(o); }
+    if (x.stun) for (const o of L.enemies) if (o.alive && Math.hypot(o.body.x - cx, o.body.y - e.body.y) < x.r) { const st = o as unknown as { stun?: number }; if (st.stun !== undefined) st.stun = Math.max(st.stun, x.stun); }
+    if (x.heal) { const p = game.save.player; p.hp = Math.min(p.maxHp, p.hp + 1); }
+    this.shake(4, 180); this.hitstop(0.06); this.impactFlash(110, x.col); audio.play('crit', 0.9);
+    this.addSurge(0.15);
+  }
+
+  /** Bond Surge ultimate: the mount's element unleashed over everything on screen. */
+  private ultimate(): void {
+    const m = this.mount; if (!m) return;
+    hud.surge = 0;
+    const L = this.lane, el = m.ph.element, col = EL_COLOR[el], view = L.cam.worldView, w = L.world;
+    const D = Math.max(4, Math.round(m.ph.stats.power / 2.2));
+    const foes = L.enemies.filter((e) => e.alive && e.kind !== 'anchor' && e.body.x > view.x - 40 && e.body.x < view.right + 40);
+    const spots = foes.length ? foes.map((e) => ({ x: e.body.x, y: e.body.y, e })) : Array.from({ length: 5 }, (_, i) => ({ x: view.x + view.width * (0.15 + i * 0.18), y: (L.data.grid.groundBelow(view.x + view.width * (0.15 + i * 0.18), view.y, 40) ?? view.bottom), e: null as EnemyLike | null }));
+    m.vocalize('roar', m.body.x); audio.play('bond', 1); audio.play('thunder', 0.7);
+    this.hitstop(0.16); this.impactFlash(320, col); this.fz = 0.8; this.slowT = 0.45; this.shake(5, 300);
+    L.vfx.play('blessing', m.body.x, m.body.y - 20, { scale: 1.4 }); L.vfx.puff(m.body.x, m.body.y - 20, col, 30, { speed: 220, gravity: 0, spread: 360, life: 600, add: true });
+    const hit = (x: number, y: number, r: number, launch: number): void => { this.strikeIn(L, { x: x - r, y: y - r * 1.4, w: r * 2, h: r * 2 }, D, el, true, m.body.x, 'dragon', m, { knock: 2.6, launch }); };
+    if (el === 'fire') {
+      // meteor shower
+      for (let i = 0; i < 12; i++) this.time.delayedCall(250 + i * 95, () => {
+        const s = spots[i % spots.length], x = s.e?.alive ? s.e.body.x : s.x + (Math.random() - 0.5) * 120;
+        w.spawnProjectile({ x: x - 130, y: view.y - 30, vx: 170, vy: 560, dmg: 1, element: 'fire', friendly: true, fx: 'fireball', scale: 1, life: 2, radius: 14, owner: m, trail: 0xff8030, add: true, aoe: { r: 64, dmg: D, fx: 'explosion', scale: 1, knock: 2.4, shake: 5 } });
+      });
+    } else {
+      spots.forEach((s, i) => this.time.delayedCall(250 + i * 130, () => {
+        const x = s.e?.alive ? s.e.body.x : s.x, y = s.e?.alive ? s.e.body.y : s.y;
+        if (el === 'storm') { L.vfx.play('thunder', x, y - 20, { scale: 1.3, add: true }); L.vfx.play('bolt', x, y, { scale: 1.2, add: true }); this.impactFlash(70, 0xe0d8ff); hit(x, y, 60, 200); }
+        else if (el === 'water') { L.vfx.play('wavecrash', x, y + 10, { scale: 1.5 }); L.vfx.play('whirlpool', x, y - 20, { scale: 1 }); hit(x, y, 80, 360); }
+        else if (el === 'ice') { L.vfx.play('frostnova', x, y, { scale: 1.5, add: true }); hit(x, y, 80, 120); for (const o of L.enemies) if (o.alive && Math.abs(o.body.x - x) < 80) { const st = o as unknown as { stun?: number }; if (st.stun !== undefined) st.stun = 3; } }
+        else if (el === 'earth') { L.vfx.play('earthspike', x, y + 30, { scale: 1.4 }); L.vfx.play('quake', x, y, { scale: 1.2 }); hit(x, y, 80, 420); this.shake(7, 200); }
+        else { L.vfx.play('leafstorm', x, y - 20, { scale: 1.8 }); L.vfx.play('spore', x, y, { scale: 1.3 }); hit(x, y, 80, 200); }
+        L.vfx.puff(x, y - 20, col, 14, { speed: 160, gravity: 60, spread: 360, life: 500, add: true }); audio.play('crit', 0.7);
+      }));
+      if (el === 'nature') { const p = game.save.player; p.hp = Math.min(p.maxHp, p.hp + 2); m.rec.hp = m.ph.stats.maxHp; L.vfx.play('heal', this.player.body.x, this.player.body.y - 10, { scale: 1.2 }); }
+    }
+    // a screen-wide sweep in the facing direction, so the ultimate always fills the view
+    const SWEEP: Record<string, [string, number, boolean]> = { fire: ['explosion', 1.2, true], water: ['wavecrash', 2.2, false], storm: ['thunder', 1.6, true], ice: ['frostnova', 1.8, true], earth: ['earthspike', 1.8, false], nature: ['leafstorm', 2.4, false] };
+    const [sfx, ssc, sadd] = SWEEP[el];
+    for (let i = 0; i < 6; i++) this.time.delayedCall(200 + i * 110, () => {
+      const t = (i + 0.5) / 6, x = m.facing > 0 ? view.x + view.width * t : view.right - view.width * t;
+      const gy = L.data.grid.groundBelow(x, view.y, 60) ?? view.bottom, y = el === 'earth' || el === 'water' ? Math.min(gy, view.bottom - 10) + 20 : view.y + view.height * (0.35 + 0.25 * Math.sin(i * 1.7));
+      L.vfx.play(sfx, x, y, { scale: ssc, add: sadd }); hit(x, y - 20, 70, 260); this.shake(3, 120);
+    });
+    // the sky answers: a burst of element-coloured motes across the whole view
+    for (let i = 0; i < 10; i++) L.vfx.puff(view.x + Math.random() * view.width, view.y + Math.random() * view.height * 0.7, col, 3, { speed: 40, gravity: el === 'ice' ? 60 : -20, spread: 360, life: 1200, add: true });
+  }
+
   /** Short, soft impact flash (a translucent tint, never a full white-out). */
   private flashRect: Phaser.GameObjects.Rectangle | null = null;
   impactFlash(ms: number, color: number): void {
@@ -838,7 +997,8 @@ export class IslandScene extends Phaser.Scene {
   private updateCamera(dt: number): void {
     const cam = this.lane.cam, b = this.mount ? this.mount.body : this.player.body, W = this.scale.width;
     // during a boss fight frame both the player and the boss
-    const boss = this.lane.enemies.map((e) => (e as { focus?: { x: number; y: number } | null }).focus).find((f) => f);
+    const track = this.camTrack && this.time.now < this.camTrack.until ? { x: this.camTrack.p.x, y: this.camTrack.p.y - 40 } : null;
+    const boss = track ?? this.lane.enemies.map((e) => (e as { focus?: { x: number; y: number } | null }).focus).find((f) => f);
     const ahead = boss ? Phaser.Math.Clamp((boss.x - b.x) * 0.45, -150, 150) : this.mount?.air ? Phaser.Math.Clamp(b.vx * 0.42, -110, 110) : this.player.facing * 22;
     this.lookX += (ahead - this.lookX) * Math.min(1, dt * 2.5);
     const ty = boss ? Math.min(b.y - 46, (b.y + boss.y) / 2 - 10) : b.y - (this.mount?.air ? 30 + Phaser.Math.Clamp(-b.vy * 0.15, -40, 40) : 46);

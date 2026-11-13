@@ -13,5 +13,7 @@ export const hud = {
   lanes: null as null | { depths: number[]; active: number; canBack: boolean; canFront: boolean },
   /** Active boss bar. */
   boss: null as null | { name: string; hp: number; max: number },
+  /** Bond Surge meter (0..1) and its element colour; the ultimate is ready at 1 */
+  surge: 0, surgeColor: 0xffffff,
   inMenu: false, dialog: null as string | null,
 };

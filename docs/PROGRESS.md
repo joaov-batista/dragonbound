@@ -69,6 +69,35 @@ Os golpes ficam em `src/dragons/DragonCombat.ts` e valem para a montaria e para 
 - Saques viram texto flutuante no lugar, em vez de aviso.
 - Os moradores falam bem menos.
 
+## Batalhas aéreas e mecânicas únicas (sessão 3)
+- **Força aérea dos Caçadores** (`src/entities/AirForce.ts`, arte em `src/art/airforce.ts`):
+  - **Planadores:** caçadores pendurados em asas de couro e osso. Mantêm distância, disparam arpões e às vezes mergulham em rasante. Abatidos, caem em espiral soltando fumaça e explodem.
+  - **Balão de Guerra:** fortaleza voadora com barra de chefe. Dispara bolas de canhão em arco, solta bombas em quem passa por baixo e lança planadores. Abatido, explode em cadeia, cai em chamas e a câmera acompanha a queda. Rende 40 a 60 moedas e não volta naquele dia.
+  - Aparece em Alvamar (só depois do Bruto), Brasaviva e Trovão, sempre que você voa por perto. Só luta contra quem está no ar.
+- **Esquadrões:** em voos longos, grupos de 2 ou 3 planadores atacam (com intervalo de 26 a 44 s).
+- **Montado, você leva dano:** tiros e investidas atingem a montaria e tiram corações.
+- **Esquiva perfeita:** dar o dash no último instante faz o golpe errar. Ativa câmera lenta, um clarão ciano e um **contra-ataque** de 1,8 s com dano em dobro, além de encher a Fúria.
+- **Reações elementais:** um acerto de elemento marca o inimigo. Um segundo elemento diferente, em até 4 s, dispara uma reação com explosão em área e o nome flutuando:
+  - fogo + natureza: Incêndio
+  - fogo + água: Vapor (atordoa)
+  - fogo + gelo: Choque térmico
+  - água + tempestade: Eletrocução (em cadeia)
+  - água + gelo: Congelado
+  - fogo + tempestade: Plasma
+  - gelo + tempestade: Granizo
+  - água + natureza: Florescer (cura)
+  - terra + qualquer outro: Estilhaços (arremessa)
+
+  O ambiente também marca: inimigo jogado no mar fica molhado, e na lava fica em chamas. Funciona melhor com um bando de elementos variados.
+- **Fúria do Vínculo:** uma barra no HUD (na cor do elemento, sem texto) que enche com acertos, abates, reações, esquivas perfeitas e balões derrubados. Cheia e montado, **Aparar (L)** solta o golpe final do elemento: pausa de impacto, câmera lenta e zoom, varredura que cobre a tela inteira e golpes em todos os inimigos à vista.
+  - Fogo: chuva de meteoros
+  - Água: maremoto
+  - Tempestade: raios em cadeia
+  - Gelo: nevasca que congela
+  - Terra: cataclismo que arremessa
+  - Natureza: ira da floresta, que também cura
+- Inimigos abatidos por dragões explodem.
+
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
 

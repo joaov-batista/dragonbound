@@ -31,7 +31,7 @@ export class Dragon implements Damageable {
   alive = true; facing = 1; air = false; ridden = false; ready = false; far = false;
   flight: FlightState;
   intent: Intent | null = null;
-  private texKey = ''; private anim: DragonAnim | '' = ''; private stuckT = 0; private lastX = 0; private stuck = false; private hitFlash = 0; private farT = 0;
+  private texKey = ''; private anim: DragonAnim | '' = ''; private stuckT = 0; private lastX = 0; private stuck = false; hitFlash = 0; private farT = 0;
   private flapSfx = 0; private s: number;
 
   constructor(public world: World, readonly rec: DragonRecord) {

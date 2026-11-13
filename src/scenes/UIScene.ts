@@ -20,6 +20,7 @@ export class UIScene extends Phaser.Scene {
   private itemIcon!: Phaser.GameObjects.Image; private itemCount!: Phaser.GameObjects.BitmapText; private itemBox!: Phaser.GameObjects.NineSlice;
   private prompt!: Phaser.GameObjects.BitmapText; private promptBg!: Phaser.GameObjects.Rectangle; private holdBar!: ReturnType<typeof bar>;
   private dPanel!: Phaser.GameObjects.Container; private dName!: Phaser.GameObjects.BitmapText; private dInfo!: Phaser.GameObjects.BitmapText; private dTrust!: ReturnType<typeof bar>; private dFear!: ReturnType<typeof bar>; private dEl!: Phaser.GameObjects.Image;
+  private surgeBar!: ReturnType<typeof bar>; private surgeIcon!: Phaser.GameObjects.Image;
   private stam!: ReturnType<typeof bar>; private stamIcon!: Phaser.GameObjects.Image; private fps!: Phaser.GameObjects.BitmapText;
   private toasts: { c: Phaser.GameObjects.Container; t: number }[] = [];
   private dialog: Phaser.GameObjects.Container | null = null; private title: Phaser.GameObjects.Container | null = null;
@@ -44,6 +45,7 @@ export class UIScene extends Phaser.Scene {
     for (let i = 0; i < 10; i++) this.hearts.push(this.add.image(12 + i * 13, 12, 'ui', 'heart').setScale(0.8));
     this.itemBox = panel(this, 4, 22, 24, 24, 'panel'); this.itemIcon = this.add.image(16, 34, 'ui', 'berry'); this.itemCount = txt(this, 30, 30, 'x0');
     this.stamIcon = this.add.image(12, 56, 'ui', 'stamina').setScale(0.7); this.stam = bar(this, null, 22, 54, 64, 0x7fe0a0);
+    this.surgeIcon = this.add.image(12, 66, 'ui', 'star').setScale(0.6); this.surgeBar = bar(this, null, 22, 64, 64, 0xffffff);
     this.promptBg = this.add.rectangle(0, 0, 10, 16, 0x0c0e1a, 0.7).setOrigin(0.5, 0); this.prompt = txt(this, 0, 0, '').setOrigin(0.5, 0);
     this.holdBar = bar(this, null, W / 2 - 40, 0, 80, COL.teal);
     this.dPanel = this.add.container(0, 4);
@@ -237,6 +239,12 @@ export class UIScene extends Phaser.Scene {
     this.stam.objs.forEach((o) => (o as Phaser.GameObjects.Rectangle).setVisible(flying || boat)); this.stamIcon.setVisible(flying || boat).setFrame(boat ? 'boat' : 'stamina').setY(ground ? 56 : 30);
     this.stam.objs.forEach((o) => (o as Phaser.GameObjects.Rectangle).setY((ground ? 54 : 28) + (o === this.stam.objs[0] ? 0 : 1)));
     if (flying) this.stam.set(hud.stamina / Math.max(1, hud.staminaMax)); else if (boat) this.stam.set(hud.boatHp / 100);
+    // Bond Surge meter (mounted on an island): fills with your dragons' hits; pulses when the ultimate is ready
+    const showSurge = showHud && hud.mode === 'flight' && hud.surge > 0.01, sy = (ground ? 54 : 28) + 10, full = hud.surge >= 1, pulse = full ? 0.6 + Math.sin(this.time.now / 90) * 0.4 : 1;
+    this.surgeBar.objs.forEach((o, i) => (o as Phaser.GameObjects.Rectangle).setVisible(showSurge).setY(sy + (i ? 1 : 0)));
+    (this.surgeBar.objs[2] as Phaser.GameObjects.Rectangle).setFillStyle(hud.surgeColor).setAlpha(pulse);
+    this.surgeIcon.setVisible(showSurge).setY(sy + 2).setScale(full ? 0.6 + Math.sin(this.time.now / 90) * 0.12 : 0.55).setTint(full ? hud.surgeColor : 0xffffff);
+    if (showSurge) this.surgeBar.set(hud.surge);
     // prompt
     const text = showHud && !hud.dialog ? hud.prompt : null;
     this.prompt.setVisible(!!text); this.promptBg.setVisible(!!text);
