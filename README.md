@@ -1,3 +1,4 @@
+
 # Dragonbound (beta)
 
 > **Versão beta 0.2.** Jogável de ponta a ponta, mas conteúdo, equilíbrio e desempenho em aparelhos reais ainda estão em desenvolvimento.
