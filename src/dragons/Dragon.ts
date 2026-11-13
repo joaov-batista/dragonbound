@@ -32,6 +32,8 @@ export class Dragon implements Damageable {
   flight: FlightState;
   intent: Intent | null = null;
   private texKey = ''; private anim: DragonAnim | '' = ''; private stuckT = 0; private lastX = 0; private stuck = false; hitFlash = 0; private farT = 0;
+  /** while > 0 the dragon keeps facing `faceDir` (it turns to the person petting, feeding or bonding with it) */
+  faceLock = 0; faceDir = 1;
   private flapSfx = 0; private s: number;
 
   constructor(public world: World, readonly rec: DragonRecord) {
@@ -145,6 +147,7 @@ export class Dragon implements Damageable {
     if (this.stuckT > 0.7) { this.stuck = !!this.intent && this.intent.speed > 0 && Math.abs(b.x - this.lastX) < 3; this.lastX = b.x; this.stuckT = 0; }
     const it = (this.intent = this.mind.update({ ...p, dt, x: b.x, y: b.y, grounded: b.onGround, stuck: this.stuck }));
     if (it.face) this.facing = it.face;
+    if (this.faceLock > 0) { this.faceLock -= dt; this.facing = this.faceDir; }
     if (it.vocal) this.vocalize(it.vocal, p.player.x);
     if (rec.bonded) tickCombat(this.combat, dt);
     if (it.strike) {

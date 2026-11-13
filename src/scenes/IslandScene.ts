@@ -730,6 +730,11 @@ export class IslandScene extends Phaser.Scene {
       // hostile strikes are resolved through world.strike (see Dragon.strike)
       d.feedback();
       if (!d.rec.bonded && d.rec.fear > 60 && it?.state !== 'flee' && it?.state !== 'attack' && it?.state !== 'defend' && it?.state !== 'trapped') d.mind.force('startled', 0.35);
+      // face to face: while petting, feeding or bonding, the hero turns to the dragon and the dragon turns back
+      if (!this.mount && !d.ridden && dist < 110 && this.focus === d && (pl.offering || pl.posing === 'pet' || pl.posing === 'offer' || pl.posing === 'calm' || (it?.state === 'bonding' && input.down('interact')))) {
+        if (Math.abs(b.x - pb.x) > 4) pl.facing = Math.sign(b.x - pb.x);
+        d.faceDir = Math.sign(pb.x - b.x) || -pl.facing; d.faceLock = 0.25;
+      }
       if (!d.ridden && dist < fd && (visible || d.rec.bonded)) { fd = dist; focus = d; }
       // bonding ritual: stay still and hold Interact while the dragon lowers its head
       if (it?.state === 'bonding') {

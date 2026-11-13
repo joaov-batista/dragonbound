@@ -56,6 +56,8 @@ export class Player implements Damageable {
   }
 
   /** Hold a gentle pose (offer / pet / calm / whistle). Cancelled by movement. */
+  /** the current held pose (pet, offer, calm…), if any */
+  get posing(): HeroAnim | null { return this.state === 'pose' ? this.pose : null; }
   setPose(p: HeroAnim | null, t = 0.2): void { this.pose = p; this.poseT = t; if (p && this.state === 'normal') this.state = 'pose'; }
 
   hurt(dmg: number, fromX: number): boolean {
