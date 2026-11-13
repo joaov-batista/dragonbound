@@ -65,6 +65,8 @@ export class IslandScene extends Phaser.Scene {
   private buildQueue: Dragon[] = []; private promptT = 0; private saveT = 45; private hatchT = 2; private foodT = 0; private leaving = false;
   private foodCache = new Map<Dragon, { x: number; y: number; thing: Interactable } | null>();
   private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private camTrack: { p: { x: number; y: number }; until: number } | null = null; private airT = 18; private warship: Warship | null = null; private elMark = new Map<EnemyLike, { el: Element; t: number }>(); private timeK = 1; private slowT = 0; private counterT = 0; private surgeTold = false;
+  /** extra camera zoom for cutscenes and captures (1 = normal) */
+  cineZoom = 1;
   private lookX = 0; private fz = 1; private mistA = 0; private inCloud = false; private vign!: Phaser.GameObjects.Image; private mist!: Phaser.GameObjects.Rectangle; private fallT = 0; private caveK = 0; private camY = 0;
 
   constructor() { super('Island'); }
@@ -230,7 +232,7 @@ export class IslandScene extends Phaser.Scene {
     if (Math.abs(target - this.laneT) < 0.002) this.laneT = target;
     const act = this.lane.cam, sx = act.scrollX, sy = act.scrollY;
     for (const l of this.lanes) {
-      const d = l.depth - this.laneT, z = Math.pow(1.6, d) * this.fz, ad = Math.abs(d);
+      const d = l.depth - this.laneT, z = Math.pow(1.6, d) * this.fz * this.cineZoom, ad = Math.abs(d);
       l.cam.setZoom(z);
       if (l !== this.lane) {
         // distant lanes sit a little higher on screen (their relief peeks over ours), near ones hug the bottom edge
