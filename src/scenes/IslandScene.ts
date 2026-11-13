@@ -239,7 +239,8 @@ export class IslandScene extends Phaser.Scene {
         const lift = d < 0 ? 26 * -d : -34 * d;
         l.cam.scrollX = sx; l.cam.scrollY = sy + lift / z;
       }
-      const alpha = d > 1 ? Math.max(0, 2 - d) : 1;
+      // lanes in front of you turn see-through, so they never hide where you are
+      const alpha = d > 1 ? Math.max(0, (2 - d) * 0.3) : d > 0.05 ? 1 - Math.min(1, d) * 0.7 : 1;
       l.cam.setAlpha(alpha).setVisible(alpha > 0.02);
       l.haze.setFillStyle(this.hazeColor, d < 0 ? Math.min(0.32, ad * 0.14) : 0);
       l.cm.active = ad > 0.01;

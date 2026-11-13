@@ -122,7 +122,35 @@ Pixel art em mundo 3D, no estilo HD-2D: personagens, dragões, árvores e efeito
   - esquiva perfeita com câmera lenta;
   - planadores abatidos caem em espiral e explodem.
 - **Interface:** HUD em DOM com pouco texto; controles de toque (analógico, arrastar para olhar e botões).
-- **Save:** o progresso fica em `localStorage` (`dragonbound3d.v1`).
+- **Save:** o progresso fica em `localStorage` (`dragonbound3d.v2`).
+- **Sessão 4: mundo vivo e loop de fazenda**
+  - **Dragões únicos com vidas:** cada dragão pode ser nocauteado 3 vezes (fica caído e se recupera). No 4º nocaute ele morre para sempre e o save guarda isso. Nocaute no mar leva herói e dragão para a praia.
+  - **Breu:** espécie original noturna e furtiva, de tempestade, que só aparece à noite perto do pico.
+  - **Orientação:**
+    - bússola com marcador do objetivo e distância em metros;
+    - objetivo numa linha só, com o diário completo no M;
+    - tutorial de domar passo a passo (achar, aproximar devagar, alimentar, confiança, vínculo, montar).
+  - **Herói personalizável:** criador de personagem com pele, cabelo, estilo, barba e cores; aparece em todas as vistas.
+  - **Combate a pé (base Peregrinos):**
+    - estamina; combo de 3; segurar para ataque forte;
+    - bloqueio com aparar perfeito, que devolve projéteis; rolamento com invencibilidade; postura e atordoamento;
+    - espadas (madeira, ferro, fogo), escudos e armaduras com defesa.
+  - **Inimigos em terra:** acampamentos de caçadores com espadachins e besteiros, e baús com equipamento.
+  - **Dash do dragão:** mais longo (0,95 s, 2,8× a velocidade).
+  - **Mundo vivo:**
+    - vila de Vigiamar com casas, píer e NPCs (chefe Ragna, ferreiro Olvar e mercado de Sigrun);
+    - rebanhos de ovelhas e flores.
+  - **Mar:**
+    - navios inimigos com canhões e barcos aliados;
+    - serpentes marinhas indomáveis;
+    - a Fera do Abismo, um chefe gigante de 14 segmentos.
+  - **Loop de fazenda:**
+    - dia e noite (15 min); casa com cama para dormir;
+    - 6 canteiros para plantar, regar e colher;
+    - loja e mochila para equipar e ver as vidas dos dragões.
+  - **Mobile:** HUD respeita a safe-area do aparelho.
+  - **2D:** a camada da frente fica translúcida quando o herói está na camada de trás.
+  - **Não verificado:** balanceamento não foi jogado do início ao fim, e a visibilidade de navios e serpentes nas capturas não ficou clara. Não foi testado em celular real.
 - **Não medido:** no Chromium headless com GL por software roda a cerca de 7 fps (130 mil triângulos, 73 draw calls). Não foi medido em GPU nem em celular.
 
 ## Fase atual

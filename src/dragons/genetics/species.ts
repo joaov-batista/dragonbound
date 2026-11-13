@@ -78,5 +78,14 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
     resist: { ice: 0.2, water: 0.7, fire: 1.7 }, abilities: ['frostBreath', 'coldProof'], foods: ['fish', 'herb'], dislikes: ['ember', 'shroom'],
     fearBias: ['fire', 'noise'], likeBias: ['quiet', 'music', 'shiny'], rideableMinSize: 0.92, canSwim: true, habitat: 'islet',
   },
+  breu: {
+    id: 'breu', name: 'Breu', element: 'storm', blurb: 'Dragão raro da noite: negro como carvão, olhos que brilham, o voo mais rápido de todos. Só aparece depois do pôr do sol, no alto da montanha, e foge de qualquer barulho.',
+    num: { speed: [0.86, 0.06], agility: [0.8, 0.08], independence: [0.74, 0.12], girth: [0.42, 0.08], wingSpan: [0.82, 0.08], bodyLen: [0.6, 0.08], courage: [0.5, 0.16], sociability: [0.3, 0.14], sensitivity: [0.78, 0.1], intelligence: [0.8, 0.1], loyalty: [0.78, 0.1], size: [0.56, 0.08] },
+    cat: { head: [[H.wedge, 0.6], [H.blunt, 0.4]], horns: [[HO.none, 0.6], [HO.swept, 0.4]], wings: [[W.bat, 1]], tail: [[T.fork, 0.55], [T.fan, 0.45]], spines: [[SP.ridge, 0.5], [SP.none, 0.5]], pattern: [[P.none, 0.7], [P.speckle, 0.3]], scales: [[SC.smooth, 0.8], [SC.plated, 0.2]], eyes: [[E.glow, 1]], morph: [[0, 1]] },
+    hue: [235, 275], hue2: [250, 290], sat: [0.12, 0.3], lum: [0.09, 0.16],
+    baseSize: 1.0, baseHp: 120, basePower: 19, baseFly: 240, baseAgility: 1.25, baseStamina: 140,
+    resist: { storm: 0.3, fire: 0.8, physical: 1.0 }, abilities: ['plasmaBlast', 'nightFlight'], foods: ['fish'], dislikes: ['berry', 'shroom'],
+    fearBias: ['noise', 'crowding', 'suddenMove'], likeBias: ['quiet', 'petting', 'play'], rideableMinSize: 0.9, canSwim: false, habitat: 'peak',
+  },
 };
 export const SPECIES_IDS = Object.keys(SPECIES) as SpeciesId[];

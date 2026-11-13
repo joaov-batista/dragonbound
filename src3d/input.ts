@@ -2,10 +2,10 @@
  * Input for the 3D world: keyboard + mouse (pointer lock for the camera) and a touch layout
  * (left stick, drag to look, action buttons). Exposes a small polled state.
  */
-export type Act = 'jump' | 'interact' | 'food' | 'mount' | 'shoot' | 'dash' | 'sneak' | 'melee' | 'up' | 'down' | 'call';
+export type Act = 'jump' | 'interact' | 'food' | 'mount' | 'shoot' | 'dash' | 'sneak' | 'melee' | 'up' | 'down' | 'call' | 'block' | 'map' | 'bag' | 'lock';
 const KEYS: Record<string, Act> = {
   Space: 'jump', KeyE: 'interact', KeyF: 'food', KeyR: 'mount', KeyI: 'shoot', KeyK: 'dash', ShiftLeft: 'sneak', ShiftRight: 'sneak',
-  KeyJ: 'melee', KeyQ: 'up', KeyC: 'down', ControlLeft: 'down', KeyH: 'call',
+  KeyJ: 'melee', KeyQ: 'up', KeyC: 'down', ControlLeft: 'down', KeyH: 'call', KeyL: 'block', KeyM: 'map', KeyB: 'bag', Tab: 'lock',
 };
 
 class Input {
@@ -18,11 +18,11 @@ class Input {
   private btn = new Map<Act, boolean>();
 
   attach(canvas: HTMLCanvasElement, hud: HTMLElement): void {
-    addEventListener('keydown', (e) => { this.keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault(); });
+    addEventListener('keydown', (e) => { this.keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault(); });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
-    canvas.addEventListener('mousedown', (e) => { if (!this.touch && document.pointerLockElement !== canvas) void canvas.requestPointerLock?.(); else if (e.button === 0) this.btn.set('shoot', true); else if (e.button === 2) this.btn.set('melee', true); });
-    addEventListener('mouseup', (e) => { if (e.button === 0) this.btn.set('shoot', false); if (e.button === 2) this.btn.set('melee', false); });
+    canvas.addEventListener('mousedown', (e) => { if (!this.touch && document.pointerLockElement !== canvas) void canvas.requestPointerLock?.(); else if (e.button === 0) this.btn.set('shoot', true); else if (e.button === 2) this.btn.set('block', true); });
+    addEventListener('mouseup', (e) => { if (e.button === 0) this.btn.set('shoot', false); if (e.button === 2) this.btn.set('block', false); });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousemove', (e) => { if (document.pointerLockElement === canvas) { this.lookX += e.movementX * 0.0032; this.lookY += e.movementY * 0.0032; } });
     // touch: left half = stick, right half = look; buttons are DOM elements

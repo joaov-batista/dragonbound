@@ -57,7 +57,8 @@ export class Fx {
 /** Anything that can be hit by the player's side. */
 export interface Target { pos: THREE.Vector3; radius: number; alive: boolean; hurt(dmg: number, el: Element | 'physical'): void }
 
-interface Shot { s: THREE.Sprite | null; pos: THREE.Vector3; vel: THREE.Vector3; t: number; el: Element; dmg: number; friendly: boolean; seek: Target | null; orb: number; trail: number }
+interface Shot { s: THREE.Sprite | null; pos: THREE.Vector3; vel: THREE.Vector3; t: number; el: Element; dmg: number; friendly: boolean; seek: Target | null; orb: number; trail: number; g?: number; boom?: boolean }
+export type HitResult = 'hit' | 'blocked' | 'parried' | 'miss';
 
 /** Dragon shots (homing), power orbs (area burst) and enemy harpoons. */
 export class Shots {
@@ -68,24 +69,36 @@ export class Shots {
     this.list.push({ s, pos: from.clone(), vel: dir.clone().normalize().multiplyScalar(sp), t: orb ? 2.2 : 1.4, el, dmg, friendly: true, seek, orb, trail: 0 });
     audio.play(el === 'fire' ? 'fire' : el === 'water' ? 'water' : el === 'storm' ? 'zap' : el === 'ice' ? 'ice' : el === 'earth' ? 'quake' : 'spore', orb ? 1 : 0.5);
   }
-  harpoon(from: THREE.Vector3, to: THREE.Vector3): void {
+  harpoon(from: THREE.Vector3, to: THREE.Vector3, _origin?: THREE.Vector3): void {
     const s = this.fx.play('icelance', from, 0.5, { loop: true, tint: 0xe8dcc0 });
-    this.list.push({ s, pos: from.clone(), vel: to.clone().sub(from).normalize().multiplyScalar(48), t: 2, el: 'ice', dmg: 1, friendly: false, seek: null, orb: 0, trail: 0 });
+    this.list.push({ s, pos: from.clone(), vel: to.clone().sub(from).normalize().multiplyScalar(42), t: 2, el: 'ice', dmg: 7, friendly: false, seek: null, orb: 0, trail: 0 });
     audio.play('dash', 0.35);
   }
-  update(dt: number, targets: Target[], hitPlayer: (p: THREE.Vector3) => boolean, burst: (p: THREE.Vector3, el: Element, r: number, dmg: number) => void): void {
+  /** A cannonball on a ballistic arc that lands at `to` and bursts. */
+  cannon(from: THREE.Vector3, to: THREE.Vector3): void {
+    const T = 1.6, g = 14, v = to.clone().sub(from).divideScalar(T); v.y += 0.5 * g * T;
+    const s = this.fx.play('plasma', from, 0.35, { loop: true, tint: 0x2a2420 });
+    this.list.push({ s, pos: from.clone(), vel: v, t: 3, el: 'fire', dmg: 14, friendly: false, seek: null, orb: 0, trail: 0, g, boom: true });
+  }
+  update(dt: number, targets: Target[], hitPlayer: (p: THREE.Vector3, dmg: number, from: THREE.Vector3) => HitResult, burst: (p: THREE.Vector3, el: Element, r: number, dmg: number) => void): void {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const s = this.list[i]; s.t -= dt;
       if (s.seek?.alive) { const want = s.seek.pos.clone().sub(s.pos).normalize().multiplyScalar(s.vel.length()); s.vel.lerp(want, Math.min(1, dt * (s.orb ? 2.5 : 5))); }
+      if (s.g) s.vel.y -= s.g * dt;
       s.pos.addScaledVector(s.vel, dt); s.s?.position.copy(s.pos);
       if ((s.trail -= dt) <= 0) { s.trail = s.orb ? 0.02 : 0.04; this.fx.puff(s.pos, s.friendly ? EL_COLOR[s.el] : 0xb0a890, s.orb ? 3 : 1, 1, 0.4, 0); }
       let hit = false;
       if (s.friendly) { for (const t of targets) if (t.alive && t.pos.distanceTo(s.pos) < t.radius + (s.orb ? 1.6 : 0.8)) { if (!s.orb) t.hurt(s.dmg, s.el); hit = true; break; } }
-      else if (hitPlayer(s.pos)) hit = true;
+      else {
+        const r = hitPlayer(s.pos, s.dmg, s.pos.clone().sub(s.vel));
+        if (r === 'parried') { s.friendly = true; s.vel.multiplyScalar(-1.4); s.dmg *= 2; s.t = 1.5; this.fx.play('parry', s.pos, 1, { add: true }); }
+        else if (r !== 'miss') hit = true;
+      }
       const ground = Math.max(height(s.pos.x, s.pos.z), SEA);
       if (s.pos.y < ground) hit = true;
       if (hit || s.t <= 0) {
         if (s.orb) burst(s.pos, s.el, 6 + s.orb * 6, s.dmg);
+        else if (s.boom) { this.fx.play(s.pos.y < SEA + 1 ? 'wavecrash' : 'explosion', s.pos.clone().setY(Math.max(s.pos.y, SEA + 0.5)), 1.2); this.fx.puff(s.pos, 0xffb040, 10, 6, 0.6, -6); audio.play('quake', 0.5); if (!hit) hitPlayer(s.pos, Math.round(s.dmg * 0.6), s.pos); }
         else if (hit) this.fx.play(s.friendly ? (s.el === 'fire' ? 'explosion' : 'hit') : 'hit', s.pos, s.el === 'fire' ? 0.5 : 0.7, { add: s.el === 'fire' });
         this.fx.kill(s.s); this.list.splice(i, 1);
       }

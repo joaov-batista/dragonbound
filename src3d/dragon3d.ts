@@ -13,7 +13,7 @@ import { pixTexture } from './pixtex';
 import { DRG_FEET, DRG_H, DRG_W, paintDragonViews } from './views';
 import { SEA, height } from './world';
 
-export type DState = 'graze' | 'wander' | 'flee' | 'approach' | 'eat' | 'bonding' | 'follow' | 'wait' | 'sky' | 'ridden';
+export type DState = 'graze' | 'wander' | 'flee' | 'approach' | 'eat' | 'bonding' | 'follow' | 'wait' | 'sky' | 'ridden' | 'down';
 
 /** Growth scale used for 3D adults (the 2D painter's 0.38..1). */
 const ADULT = 1;
@@ -24,10 +24,11 @@ export class Dragon3D {
   pos = new THREE.Vector3(); vel = new THREE.Vector3(); heading = 0; state: DState = 'graze';
   air = false; home = new THREE.Vector3(); stateT = 0; emote: string | null = null; emoteT = 0; flash = 0;
   bondHold = 0; roll = 0; pitch = 0; speed = 0;
-  readonly side: Billboard; readonly views: Billboard; readonly shadow: THREE.Mesh;
+  /** knockouts left before a fourth one kills for good */ lives = 3; downT = 0; dead = false; nocturnal = false; hidden = false;
+  readonly side: Billboard; views: Billboard; readonly shadow: THREE.Mesh;
   private t = Math.random() * 10; private target = new THREE.Vector3(); private skyT = 30 + Math.random() * 60; private eatT = 0;
 
-  constructor(scene: THREE.Scene, genes: DragonGenes, x: number, z: number, day: number) {
+  constructor(private scene: THREE.Scene, genes: DragonGenes, x: number, z: number, day: number, rider?: import('../src/art/hero').HeroStyle) {
     this.ph = expressPhenotype(genes);
     this.rec = {
       genes, name: generateName(genes.seed), bornDay: day - 20, hp: this.ph.stats.maxHp, hunger: 0.6, energy: 1, trust: 0, fear: 0, bonded: false, training: 30, observed: 0,
@@ -35,7 +36,7 @@ export class Dragon3D {
     };
     this.bond = new Bond(this.rec, this.ph, () => effectiveTraits(this.ph.personality, this.rec));
     this.pos.set(x, height(x, z), z); this.home.copy(this.pos); this.heading = Math.random() * 6.28;
-    const side = paintDragonSheet(this.ph, ADULT), views = paintDragonViews(this.ph, ADULT);
+    const side = paintDragonSheet(this.ph, ADULT), views = paintDragonViews(this.ph, ADULT, rider);
     this.side = new Billboard(pixTexture(side.pix), side.frames, DRAGON_FW, DRAGON_FH, DRAGON_OY, DRAGON_OX);
     this.views = new Billboard(pixTexture(views.pix), views.frames, DRG_W, DRG_H, DRG_FEET, DRG_W / 2);
     this.shadow = blobShadow(3.4 * this.ph.size + 1);
@@ -52,7 +53,9 @@ export class Dragon3D {
   /** Wild / bonded behaviour on the ground and in the sky (not while ridden). */
   update(dt: number, hero: Hero, day: number, bestFood: () => FoodId | null, eat: (f: FoodId) => void): void {
     this.t += dt; this.stateT += dt; this.emoteT -= dt; this.flash -= dt; this.bond.tick(dt);
-    if (this.state === 'ridden') return;
+    if (this.state === 'ridden' || this.dead) return;
+    if (this.state === 'down') { this.downT -= dt; this.speed = 0; this.air = false; this.walk(dt, 0); if (this.downT <= 0) { this.rec.hp = this.ph.stats.maxHp * 0.5; this.setState(this.rec.bonded ? 'follow' : 'graze'); } return; }
+    if (this.hidden) return;
     const r = this.rec, tr = this.traits, d = Math.hypot(hero.pos.x - this.pos.x, hero.pos.z - this.pos.z), dy = hero.pos.y - this.pos.y;
     const inSight = d < 70 && !hero.mounted;
     // the shared taming rules (distances there are in 2D pixels: 16 px per metre)
@@ -130,15 +133,17 @@ export class Dragon3D {
 
   /** Pick and place sprites for this frame. */
   render(cam: THREE.Camera, tint: THREE.Color, riderInSide: (x: number, y: number, z: number, visible: boolean) => void): void {
+    if (this.dead) return;
+    const vis = !this.hidden; this.side.mesh.visible = this.views.mesh.visible = this.shadow.visible = vis; if (!vis) return;
     const p = this.pos, ridden = this.state === 'ridden', fly = this.air || ridden && this.speed > 0.1 && this.air;
     const view = viewFor(this.heading, cam.position, p);
-    const sideVisible = view === 'side' || (view === 'front' && fly);
+    const sideVisible = view === 'side' || (view === 'front' && fly) || this.state === 'down';
     this.side.mesh.visible = sideVisible; this.views.mesh.visible = !sideVisible;
     this.side.mesh.position.copy(p); this.views.mesh.position.copy(p);
     const flyFrame = Math.floor(this.t * (this.speed > 18 ? 8 : 11)) % 6;
     if (sideVisible) {
-      const a = fly ? 'fly' : this.state === 'eat' ? 'eat' : this.state === 'bonding' ? 'nuzzle' : this.speed > 0.3 ? 'walk' : 'idle';
-      const n = { fly: 6, eat: 3, nuzzle: 2, walk: 6, idle: 4 }[a], fps = { fly: 11, eat: 6, nuzzle: 3, walk: 10, idle: 5 }[a];
+      const a = fly ? 'fly' : this.state === 'down' ? 'sleep' : this.state === 'eat' ? 'eat' : this.state === 'bonding' ? 'nuzzle' : this.speed > 0.3 ? 'walk' : 'idle';
+      const n = { fly: 6, eat: 3, nuzzle: 2, walk: 6, idle: 4, sleep: 2 }[a], fps = { fly: 11, eat: 6, nuzzle: 3, walk: 10, idle: 5, sleep: 1 }[a];
       this.side.set(`${a}_${a === 'fly' ? flyFrame : Math.floor(this.t * fps) % n}`, !facesRight(this.heading, cam));
       this.side.face(cam, fly, fly ? this.roll * 0.5 : 0);
       this.side.mat.color.copy(tint); if (this.flash > 0) this.side.mat.color.setRGB(2, 2, 2);
@@ -155,6 +160,15 @@ export class Dragon3D {
     this.shadow.position.set(p.x, g + 0.05, p.z);
     const alt = p.y - g; this.shadow.scale.setScalar(Math.max(0.3, 1 - alt / 40)); (this.shadow.material as THREE.MeshBasicMaterial).opacity = Math.max(0.15, 1 - alt / 50);
   }
+  /** Repaint the back view with a new rider look. */
+  repaintRider(rider: import('../src/art/hero').HeroStyle): void {
+    const v = paintDragonViews(this.ph, ADULT, rider);
+    this.scene.remove(this.views.mesh); this.views.mat.dispose();
+    this.views = new Billboard(pixTexture(v.pix), v.frames, DRG_W, DRG_H, DRG_FEET, DRG_W / 2);
+    this.scene.add(this.views.mesh);
+  }
+  /** Gone for good: remove every sprite. */
+  vanish(): void { this.dead = true; for (const m of [this.side.mesh, this.views.mesh, this.shadow]) this.scene.remove(m); }
   remember(kind: Parameters<typeof remember>[2], day: number, v: number): void { remember(this.rec, day, kind, v); }
 }
 

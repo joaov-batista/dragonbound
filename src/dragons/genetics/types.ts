@@ -1,4 +1,4 @@
-export type SpeciesId = 'cinzal' | 'marulho' | 'folhasca' | 'trovisco' | 'pedrusco' | 'geadino';
+export type SpeciesId = 'cinzal' | 'marulho' | 'folhasca' | 'trovisco' | 'pedrusco' | 'geadino' | 'breu';
 export type Element = 'fire' | 'water' | 'nature' | 'storm' | 'earth' | 'ice';
 
 export const HEADS = ['wedge', 'blunt', 'long', 'crest'] as const;

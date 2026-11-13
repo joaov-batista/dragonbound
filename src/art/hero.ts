@@ -205,7 +205,7 @@ export function heroFrameNames(): string[] {
 }
 
 /** Paints the full hero sheet; returns pixel canvas + frame rects. */
-export function paintHeroSheet(): { pix: Pix; frames: Record<string, { x: number; y: number; w: number; h: number }> } {
+export function paintHeroSheet(style: HeroStyle = HERO_STYLE): { pix: Pix; frames: Record<string, { x: number; y: number; w: number; h: number }> } {
   const names = heroFrameNames(), cols = 12, rows = Math.ceil(names.length / cols);
   const pix = new Pix(cols * HERO_FRAME, rows * HERO_FRAME);
   const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -213,7 +213,7 @@ export function paintHeroSheet(): { pix: Pix; frames: Record<string, { x: number
   for (const [anim, d] of Object.entries(HERO_ANIMS))
     for (let i = 0; i < d.n; i++, k++) {
       const x = (k % cols) * HERO_FRAME, y = Math.floor(k / cols) * HERO_FRAME;
-      drawHero(pix, x, y, heroPose(anim as HeroAnim, i));
+      drawHero(pix, x, y, heroPose(anim as HeroAnim, i), style);
       frames[`${anim}_${i}`] = { x, y, w: HERO_FRAME, h: HERO_FRAME };
     }
   return { pix, frames };
