@@ -1,0 +1,7 @@
+node_modules
+dist
+dev-dist
+*.log
+.vite
+tests/screenshots/*.png
+!tests/screenshots/keep-*.png

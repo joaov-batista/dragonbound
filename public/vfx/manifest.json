@@ -1,0 +1,574 @@
+{
+ "slash": {
+  "id": "melee/sword-slash",
+  "fps": 20,
+  "loop": false,
+  "frames": 16,
+  "w": 85,
+  "h": 68,
+  "cols": 4,
+  "pivot": [
+   29,
+   61
+  ]
+ },
+ "slash2": {
+  "id": "melee/double-slash",
+  "fps": 20,
+  "loop": false,
+  "frames": 17,
+  "w": 81,
+  "h": 64,
+  "cols": 4,
+  "pivot": [
+   9,
+   54
+  ]
+ },
+ "cleave": {
+  "id": "melee/heavy-cleave",
+  "fps": 10,
+  "loop": false,
+  "frames": 20,
+  "w": 100,
+  "h": 65,
+  "cols": 4,
+  "pivot": [
+   32,
+   52
+  ]
+ },
+ "spin": {
+  "id": "melee/spin-slash",
+  "fps": 20,
+  "loop": false,
+  "frames": 17,
+  "w": 121,
+  "h": 67,
+  "cols": 4,
+  "pivot": [
+   53,
+   54
+  ]
+ },
+ "claw": {
+  "id": "melee/claw-swipe",
+  "fps": 20,
+  "loop": false,
+  "frames": 19,
+  "w": 50,
+  "h": 40,
+  "cols": 4,
+  "pivot": [
+   5,
+   32
+  ]
+ },
+ "hit": {
+  "id": "impacts/hit-spark",
+  "fps": 24,
+  "loop": false,
+  "frames": 13,
+  "w": 80,
+  "h": 47,
+  "cols": 3,
+  "pivot": [
+   22,
+   37
+  ]
+ },
+ "crit": {
+  "id": "impacts/crit-hit",
+  "fps": 24,
+  "loop": false,
+  "frames": 23,
+  "w": 115,
+  "h": 86,
+  "cols": 5,
+  "pivot": [
+   51,
+   67
+  ]
+ },
+ "parry": {
+  "id": "impacts/parry",
+  "fps": 24,
+  "loop": false,
+  "frames": 25,
+  "w": 114,
+  "h": 66,
+  "cols": 4,
+  "pivot": [
+   55,
+   56
+  ]
+ },
+ "slam": {
+  "id": "impacts/ground-slam",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 22,
+  "w": 161,
+  "h": 113,
+  "cols": 4,
+  "pivot": [
+   81,
+   84
+  ]
+ },
+ "land": {
+  "id": "impacts/heavy-landing",
+  "fps": 10,
+  "loop": false,
+  "frames": 17,
+  "w": 89,
+  "h": 27,
+  "cols": 3,
+  "pivot": [
+   46,
+   18
+  ]
+ },
+ "block": {
+  "id": "impacts/shield-block",
+  "fps": 20,
+  "loop": false,
+  "frames": 23,
+  "w": 73,
+  "h": 51,
+  "cols": 5,
+  "pivot": [
+   13,
+   42
+  ]
+ },
+ "explosion": {
+  "id": "explosions/small-explosion",
+  "fps": 4,
+  "loop": false,
+  "frames": 22,
+  "w": 138,
+  "h": 145,
+  "cols": 5,
+  "pivot": [
+   65,
+   116
+  ]
+ },
+ "dirt": {
+  "id": "explosions/dirt-explosion",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 25,
+  "w": 166,
+  "h": 152,
+  "cols": 5,
+  "pivot": [
+   84,
+   130
+  ]
+ },
+ "plasma": {
+  "id": "explosions/plasma-explosion",
+  "fps": 10,
+  "loop": false,
+  "frames": 18,
+  "w": 135,
+  "h": 125,
+  "cols": 5,
+  "pivot": [
+   71,
+   63
+  ]
+ },
+ "poof": {
+  "id": "spawn/poof",
+  "fps": 10,
+  "loop": false,
+  "frames": 17,
+  "w": 58,
+  "h": 49,
+  "cols": 4,
+  "pivot": [
+   28,
+   42
+  ]
+ },
+ "firebreath": {
+  "id": "fire/fire-breath",
+  "fps": 16,
+  "loop": true,
+  "frames": 24,
+  "w": 103,
+  "h": 75,
+  "cols": 5,
+  "pivot": [
+   8,
+   46
+  ]
+ },
+ "fireball": {
+  "id": "fire/fireball",
+  "fps": 16,
+  "loop": true,
+  "frames": 19,
+  "w": 77,
+  "h": 36,
+  "cols": 3,
+  "pivot": [
+   62,
+   18
+  ]
+ },
+ "torch": {
+  "id": "fire/torch",
+  "fps": 12,
+  "loop": true,
+  "frames": 24,
+  "w": 46,
+  "h": 73,
+  "cols": 7,
+  "pivot": [
+   23,
+   57
+  ]
+ },
+ "campfire": {
+  "id": "fire/campfire",
+  "fps": 6,
+  "loop": true,
+  "frames": 18,
+  "w": 79,
+  "h": 63,
+  "cols": 4,
+  "pivot": [
+   40,
+   53
+  ]
+ },
+ "burning": {
+  "id": "status/burning",
+  "fps": 12,
+  "loop": true,
+  "frames": 14,
+  "w": 30,
+  "h": 45,
+  "cols": 5,
+  "pivot": [
+   15,
+   42
+  ]
+ },
+ "frostbreath": {
+  "id": "ice/frost-breath",
+  "fps": 16,
+  "loop": true,
+  "frames": 19,
+  "w": 114,
+  "h": 49,
+  "cols": 3,
+  "pivot": [
+   7,
+   22
+  ]
+ },
+ "icelance": {
+  "id": "ice/ice-lance",
+  "fps": 16,
+  "loop": true,
+  "frames": 13,
+  "w": 93,
+  "h": 33,
+  "cols": 3,
+  "pivot": [
+   85,
+   17
+  ]
+ },
+ "iceshatter": {
+  "id": "ice/ice-shatter",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 19,
+  "w": 121,
+  "h": 71,
+  "cols": 4,
+  "pivot": [
+   37,
+   57
+  ]
+ },
+ "frostnova": {
+  "id": "ice/frost-nova",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 23,
+  "w": 168,
+  "h": 92,
+  "cols": 4,
+  "pivot": [
+   83,
+   65
+  ]
+ },
+ "zap": {
+  "id": "lightning/zap-hit",
+  "fps": 20,
+  "loop": false,
+  "frames": 19,
+  "w": 83,
+  "h": 66,
+  "cols": 4,
+  "pivot": [
+   50,
+   33
+  ]
+ },
+ "bolt": {
+  "id": "lightning/lightning-strike",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 21,
+  "w": 152,
+  "h": 172,
+  "cols": 5,
+  "pivot": [
+   76,
+   149
+  ]
+ },
+ "sparkarc": {
+  "id": "lightning/spark-arc",
+  "fps": 8,
+  "loop": true,
+  "frames": 16,
+  "w": 65,
+  "h": 69,
+  "cols": 5,
+  "pivot": [
+   30,
+   62
+  ]
+ },
+ "thunder": {
+  "id": "lightning/thunderclap",
+  "fps": 10,
+  "loop": false,
+  "frames": 20,
+  "w": 168,
+  "h": 96,
+  "cols": 4,
+  "pivot": [
+   85,
+   76
+  ]
+ },
+ "waterjet": {
+  "id": "water/water-jet",
+  "fps": 16,
+  "loop": true,
+  "frames": 16,
+  "w": 119,
+  "h": 41,
+  "cols": 3,
+  "pivot": [
+   9,
+   15
+  ]
+ },
+ "splash": {
+  "id": "water/splash",
+  "fps": 10,
+  "loop": false,
+  "frames": 26,
+  "w": 84,
+  "h": 65,
+  "cols": 5,
+  "pivot": [
+   44,
+   51
+  ]
+ },
+ "ripples": {
+  "id": "water/ripples",
+  "fps": 12,
+  "loop": true,
+  "frames": 24,
+  "w": 83,
+  "h": 32,
+  "cols": 4,
+  "pivot": [
+   42,
+   18
+  ]
+ },
+ "bubbles": {
+  "id": "water/bubbles",
+  "fps": 6,
+  "loop": true,
+  "frames": 24,
+  "w": 64,
+  "h": 69,
+  "cols": 6,
+  "pivot": [
+   32,
+   66
+  ]
+ },
+ "whirlpool": {
+  "id": "water/whirlpool",
+  "fps": 6,
+  "loop": true,
+  "frames": 18,
+  "w": 78,
+  "h": 53,
+  "cols": 4,
+  "pivot": [
+   39,
+   26
+  ]
+ },
+ "wavecrash": {
+  "id": "water/wave-crash",
+  "fps": 8,
+  "loop": false,
+  "frames": 26,
+  "w": 142,
+  "h": 57,
+  "cols": 4,
+  "pivot": [
+   71,
+   46
+  ]
+ },
+ "leafstorm": {
+  "id": "nature/leaf-storm",
+  "fps": 8,
+  "loop": true,
+  "frames": 19,
+  "w": 63,
+  "h": 61,
+  "cols": 5,
+  "pivot": [
+   32,
+   54
+  ]
+ },
+ "spore": {
+  "id": "nature/spore-burst",
+  "fps": 8,
+  "loop": false,
+  "frames": 26,
+  "w": 79,
+  "h": 74,
+  "cols": 5,
+  "pivot": [
+   40,
+   65
+  ]
+ },
+ "earthspike": {
+  "id": "nature/earth-spike",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 23,
+  "w": 161,
+  "h": 92,
+  "cols": 4,
+  "pivot": [
+   75,
+   81
+  ]
+ },
+ "quake": {
+  "id": "nature/quake",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 21,
+  "w": 164,
+  "h": 51,
+  "cols": 3,
+  "pivot": [
+   86,
+   41
+  ]
+ },
+ "levelup": {
+  "id": "ui/level-up",
+  "fps": 6.7,
+  "loop": false,
+  "frames": 22,
+  "w": 107,
+  "h": 90,
+  "cols": 5,
+  "pivot": [
+   53,
+   75
+  ]
+ },
+ "exclaim": {
+  "id": "ui/exclamation",
+  "fps": 16,
+  "loop": false,
+  "frames": 23,
+  "w": 33,
+  "h": 42,
+  "cols": 6,
+  "pivot": [
+   17,
+   55
+  ]
+ },
+ "collect": {
+  "id": "pickups/collect-burst",
+  "fps": 12,
+  "loop": false,
+  "frames": 17,
+  "w": 51,
+  "h": 57,
+  "cols": 5,
+  "pivot": [
+   24,
+   53
+  ]
+ },
+ "heal": {
+  "id": "holy/heal",
+  "fps": 8,
+  "loop": false,
+  "frames": 16,
+  "w": 36,
+  "h": 55,
+  "cols": 5,
+  "pivot": [
+   18,
+   48
+  ]
+ },
+ "blessing": {
+  "id": "holy/blessing",
+  "fps": 8,
+  "loop": true,
+  "frames": 24,
+  "w": 34,
+  "h": 83,
+  "cols": 8,
+  "pivot": [
+   17,
+   71
+  ]
+ },
+ "sleep": {
+  "id": "status/sleep",
+  "fps": 8,
+  "loop": true,
+  "frames": 19,
+  "w": 35,
+  "h": 43,
+  "cols": 5,
+  "pivot": [
+   14,
+   48
+  ]
+ }
+}
