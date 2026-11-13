@@ -1,4 +1,6 @@
-# Dragonbound
+# Dragonbound (beta)
+
+> **Versão beta 0.2.** Jogável de ponta a ponta, mas conteúdo, equilíbrio e desempenho em aparelhos reais ainda estão em desenvolvimento.
 
 RPG de ação e exploração 2D em pixel art, feito com **Phaser 4 + TypeScript + Vite**, instalável como **PWA**.
 Explore um arquipélago, observe dragões selvagens, conquiste a confiança deles, monte e voe sobre o mar.

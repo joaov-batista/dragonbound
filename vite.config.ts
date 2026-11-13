@@ -11,7 +11,7 @@ export default defineConfig({
       includeAssets: ['icons/*.png'],
       manifest: {
         name: 'Dragonbound', short_name: 'Dragonbound', lang: 'pt-BR',
-        description: 'RPG de ação em pixel art: conquiste a confiança de dragões únicos em um arquipélago vivo.',
+        description: 'Beta — RPG de ação em pixel art: conquiste a confiança de dragões únicos em um arquipélago vivo.',
         start_url: './', scope: './', display: 'fullscreen', display_override: ['fullscreen', 'standalone'], orientation: 'landscape',
         background_color: '#0c0e1a', theme_color: '#0c0e1a', categories: ['games'],
         icons: [

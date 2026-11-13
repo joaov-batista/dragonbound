@@ -71,9 +71,11 @@ Confiança 0–100 e medo 0–100. Estágios: Arisco <15, Desconfiado <35, Curio
 - `GameState.populate` cria a população de cada ilha na primeira visita (determinística por `worldSeed`).
 
 ## 12. Voo e combate
-- `Flight.updateRide`: no chão anda; pulo decola. No ar: sustentação ∝ velocidade, subir gasta fôlego, mergulho vira velocidade, batida de asas, rolagem com invencibilidade, mordida, sopro elemental (projétil), zonas de vento, turbulência em tempestade. Resposta aos comandos depende de treino, agilidade, independência.
+- `Flight.updateRide`: no chão anda; pulo decola. No ar: sustentação ∝ velocidade, subir gasta fôlego, mergulho vira velocidade, batida de asas, dash reto com rastro e invencibilidade (sem pirueta, a pedido do usuário), mordida, sopro elemental (projétil), zonas de vento, turbulência em tempestade. Resposta aos comandos depende de treino, agilidade, independência.
 - Sair pela borda da ilha voando → `OceanScene` em voo. No oceano o voo é top-down (direção + fôlego + vento de cauda).
 - Combate do herói em `Player.ts` (retângulo de ataque por quadro, `attackId` evita acerto duplo). `IslandScene.strike` resolve dano entre lados. Hitstop e tremor em `IslandScene`.
+
+Cavaleiro: `placeRider` (Flight.ts) põe o quadril do herói em `Dragon.saddle`, que usa `saddlePoint` com o quadro de animação atual do dragão. Minimapa: cenas escrevem `hud.minimap`; a ilha pinta a textura `mm-island`; `UIScene.drawMinimap` desenha.
 
 ## 13. PixelFx
 `tools/gen-vfx.mjs` renderiza 44 efeitos para `public/vfx/<chave>.png` + `manifest.json` (quadros, fps, pivô), recortando ao bounding box, limitando a 26 quadros e reduzindo a 66 %. `VfxManager.play(chave, x, y, opts)` usa um pool de sprites ancorados no pivô; one-shots respeitam um orçamento ligado à qualidade. Para adicionar um efeito: inclua em `FX` no script, rode `npm run assets:vfx`, use a chave.

@@ -35,7 +35,7 @@ export class OceanScene extends Phaser.Scene {
   private vessel!: Phaser.GameObjects.Sprite; private shadow!: Phaser.GameObjects.Ellipse; private rain!: Phaser.GameObjects.Particles.ParticleEmitter; private clouds: Phaser.GameObjects.Image[] = [];
   private vfx!: VfxManager;
   private x = 0; private y = 0; private a = 0; private speed = 0; private vx = 0; private vy = 0;
-  private flying = false; private comp: DragonRecord | null = null; private stamina = 100; private roll = 0; private cd = 0; private inv = 0;
+  private flying = false; private comp: DragonRecord | null = null; private stamina = 100; private dashT = 0; private dashCd = 0; private ghostT = 0; private cd = 0; private inv = 0;
   private storm = 0; private windA = 0; private boltT = 3; private t = 0; private saveT = 20; private leaving = false; private near: IslandSite | null = null; private frameT = 0; private wf = 0;
   private data0: { from?: string; heading?: number; resume?: boolean } = {};
 
@@ -65,7 +65,7 @@ export class OceanScene extends Phaser.Scene {
     events.emit('areaTitle', { title: 'Mar Aberto', subtitle: this.flying ? 'Nas asas do vento' : 'Vento, correntes e horizonte' });
     if (!this.data0.resume && !this.flying) events.emit('toast', { text: 'Mova para manobrar e acelerar. Aproxime-se de uma ilha para desembarcar.', icon: 'boat' });
     audio.setMusic('ocean');
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { DragonTextures.dispose(this); for (const k of this.textures.getTextureKeys()) if (k.startsWith('isl-')) this.textures.remove(k); hud.compass = null; input.clearVirtual(); });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { DragonTextures.dispose(this); for (const k of this.textures.getTextureKeys()) if (k.startsWith('isl-')) this.textures.remove(k); hud.compass = null; hud.minimap = null; input.clearVirtual(); });
     if (DEBUG) (window as unknown as Record<string, unknown>).__ocean = this;
   }
 
@@ -166,7 +166,7 @@ export class OceanScene extends Phaser.Scene {
     if (hud.dialog) { if (inp.pressed('interact') || inp.pressed('jump') || inp.pressed('pause')) { hud.dialog = null; events.emit('dialog', null); } return; }
     if (inp.pressed('pause')) { events.emit('openMenu', undefined); return; }
     if (inp.pressed('map')) { events.emit('openMenu', { tab: 'map' }); return; }
-    game.tick(dt); this.t += dt; this.cd -= dt; this.inv -= dt; this.roll -= dt;
+    game.tick(dt); this.t += dt; this.cd -= dt; this.inv -= dt; this.dashT -= dt; this.dashCd -= dt; this.ghostT -= dt;
 
     // weather: the storm island drags a permanent tempest; fronts wander elsewhere
     const st = MAIN_SITES[2], front = Math.max(0, Math.sin(this.t * 0.02 + this.x / 2600 + this.y / 1900 + 3.6) - 0.8) * 4;
@@ -178,11 +178,12 @@ export class OceanScene extends Phaser.Scene {
     if (this.flying && this.comp) {
       const ph = game.phenotype(this.comp), tired = this.stamina <= 0;
       if (mag > 0.2) { const want = Math.atan2(iy, ix); this.a = Phaser.Math.Angle.RotateTo(this.a, want, (2.2 + ph.stats.agility * 1.4) * dt); }
-      const maxV = ph.stats.flySpeed * 0.62 * (tired ? 0.5 : 1) * (this.roll > 0 ? 1.7 : 1) * (inp.down('jump') && !tired ? 1.3 : 1);
+      const maxV = ph.stats.flySpeed * 0.62 * (tired ? 0.5 : 1) * (this.dashT > 0 ? 1.9 : 1) * (inp.down('jump') && !tired ? 1.3 : 1);
       this.speed += ((mag > 0.2 ? maxV : maxV * 0.55) - this.speed) * Math.min(1, dt * 1.8);
       const tail = Math.cos(this.a - this.windA);
       this.stamina = clamp(this.stamina + (tail > 0.5 ? 5 : -2.2 - (inp.down('jump') ? 4 : 0) - this.storm * (ph.abilities.includes('stormRider') ? 0 : 3)) * dt, 0, ph.stats.stamina);
-      if (inp.pressed('dash') && this.roll < -0.6 && this.stamina > 10) { this.roll = 0.35; this.stamina -= 10; this.inv = 0.45; audio.play('dash'); }
+      if (inp.pressed('dash') && this.dashCd <= 0 && this.stamina > 10) { this.dashT = 0.3; this.dashCd = 0.8; this.stamina -= 10; this.inv = 0.4; this.speed = maxV; audio.play('dash'); }
+      if (this.dashT > 0 && this.ghostT <= 0) { this.ghostT = 0.04; const g = this.add.image(this.vessel.x, this.vessel.y, this.vessel.texture.key, this.vessel.frame.name).setRotation(this.a).setDepth(29).setTint(0x9fe8ff).setTintMode(Phaser.TintModes.FILL).setAlpha(0.5); this.tweens.add({ targets: g, alpha: 0, duration: 280, onComplete: () => g.destroy() }); }
       this.vx += (Math.cos(this.a) * this.speed + wx * 0.5 - this.vx) * Math.min(1, dt * 3); this.vy += (Math.sin(this.a) * this.speed + wy * 0.5 - this.vy) * Math.min(1, dt * 3);
       if (this.storm > 0.6 && !ph.abilities.includes('stormRider')) { this.vx += Math.sin(this.t * 3.1) * 40 * dt; this.vy += Math.cos(this.t * 2.3) * 40 * dt; }
       hud.stamina = this.stamina; hud.staminaMax = ph.stats.stamina; audio.setWindBoost(this.speed / (ph.stats.flySpeed * 0.8));
@@ -219,6 +220,7 @@ export class OceanScene extends Phaser.Scene {
     if (this.near && inp.pressed('interact')) { this.land(this.near); return; }
     if (nearest) { const ang = Math.atan2(nearest.y - this.y, nearest.x - this.x); hud.compass = { angle: ang, label: `${o.discovered.includes(nearest.id) ? nearest.name : 'Terra à vista?'} · ${DIRS[((Math.round(ang / (Math.PI / 4)) % 8) + 8) % 8]} · ${Math.round(nd / 10)} braças` }; }
 
+    hud.minimap = { kind: 'ocean', x: this.x, y: this.y, a: this.a, flying: this.flying };
     this.updateCreatures(dt);
     this.updateShots(dt);
     this.stream();
@@ -295,7 +297,7 @@ export class OceanScene extends Phaser.Scene {
     // vessel
     const bob = this.flying ? 0 : Math.sin(time / 300) * (1 + this.storm * 2);
     this.vessel.setPosition(Math.round(this.x), Math.round(this.y + bob - (this.flying ? 14 : 0))).setRotation(this.a).setAlpha(this.inv > 0 && Math.floor(this.inv * 16) % 2 ? 0.4 : 1);
-    if (this.flying) this.vessel.setScale(1, this.roll > 0 ? Math.cos((0.35 - this.roll) * 18) : 1); else { this.vessel.setScale(1); this.vessel.setFrame(Math.floor(time / 400) % 2 ? 'boat_1' : 'boat_0'); }
+    if (this.flying) this.vessel.setScale(1); else { this.vessel.setScale(1); this.vessel.setFrame(Math.floor(time / 400) % 2 ? 'boat_1' : 'boat_0'); }
     this.shadow.setPosition(this.x + 6, this.y + (this.flying ? 16 : 3)).setVisible(this.flying).setRotation(this.a);
     // wake, wind streaks, current streaks
     const k = particleScale();

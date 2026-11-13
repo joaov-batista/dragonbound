@@ -12,8 +12,9 @@ import { STAGE_LABEL, bondStage, type DragonRecord } from './DragonRecord';
 import type { Element, Phenotype } from './genetics/types';
 import { DRAGON_OX, DRAGON_OY, DRAGON_FW, DRAGON_FH, type DragonAnim } from './rendering/dragonAnims';
 import { DragonTextures } from './rendering/DragonTextures';
+import { saddlePoint } from './rendering/DragonPainter';
 
-export interface FlightState { stamina: number; sx: number; sy: number; flapT: number; rollT: number; rollCd: number; breathCd: number; biteCd: number; boost: number; airborne: boolean; wobble: number }
+export interface FlightState { stamina: number; sx: number; sy: number; flapT: number; dashT: number; dashCd: number; ghostT: number; breathCd: number; biteCd: number; boost: number; airborne: boolean; wobble: number }
 
 const ELEMENT_FX: Record<Element, { fx: string; sfx: 'fire' | 'water' | 'spore' | 'zap' | 'quake' | 'ice'; color: number }> = {
   fire: { fx: 'firebreath', sfx: 'fire', color: 0xff8a30 }, water: { fx: 'waterjet', sfx: 'water', color: 0x6fd0f0 }, nature: { fx: 'spore', sfx: 'spore', color: 0x9fe070 },
@@ -38,14 +39,29 @@ export class Dragon implements Damageable {
     this.sprite = sc.add.sprite(rec.x, rec.y, 'ui', 'white').setVisible(false).setDepth(DEPTH.entities + (rec.bonded ? 2 : 1));
     this.emote = sc.add.image(rec.x, rec.y, 'ui', 'e_question').setVisible(false).setDepth(DEPTH.vfx + 2);
     if (rec.trapped) this.trap = sc.add.image(rec.x, rec.y, 'props', 'trap').setOrigin(0.5, 1).setDepth(DEPTH.entities + 3).setScale(1.5 * this.s + 0.4);
-    this.flight = { stamina: this.ph.stats.stamina, sx: 0, sy: 0, flapT: 0, rollT: 0, rollCd: 0, breathCd: 0, biteCd: 0, boost: 0, airborne: false, wobble: 0 };
+    this.flight = { stamina: this.ph.stats.stamina, sx: 0, sy: 0, flapT: 0, dashT: 0, dashCd: 0, ghostT: 0, breathCd: 0, biteCd: 0, boost: 0, airborne: false, wobble: 0 };
     this.lastX = rec.x;
   }
 
   get scale(): number { return this.s; }
   get center(): { x: number; y: number } { return { x: this.body.x, y: this.body.y - this.body.h * 0.6 }; }
   get mouth(): { x: number; y: number } { return { x: this.body.x + this.facing * 30 * this.s, y: this.body.y - (this.air ? 20 : 26) * this.s - (this.air ? 14 * this.s : 0) }; }
-  get saddle(): { x: number; y: number } { return { x: this.body.x + this.facing * 2 * this.s, y: this.body.y - (this.air ? 34 : 21) * this.s + 9 }; }
+  /** World position of the rider's hip, following this individual's back through every animation frame. */
+  get saddle(): { x: number; y: number; rot: number } {
+    const fr = String(this.sprite.frame?.name ?? 'idle_0'), k = fr.lastIndexOf('_');
+    const anim = (k > 0 ? fr.slice(0, k) : 'idle') as DragonAnim, i = k > 0 ? Number(fr.slice(k + 1)) || 0 : 0;
+    const [lx, ly] = saddlePoint(this.ph, game.scale(this.rec), anim, i);
+    const r = this.sprite.rotation, dx = lx * this.facing, c = Math.cos(r), s = Math.sin(r);
+    return { x: this.sprite.x + dx * c - ly * s, y: this.sprite.y + dx * s + ly * c, rot: r };
+  }
+  /** Leather saddle shown while bonded and rideable (created lazily). */
+  private saddleImg: Phaser.GameObjects.Image | null = null;
+  syncSaddle(show: boolean): void {
+    if (!show) { this.saddleImg?.setVisible(false); return; }
+    this.saddleImg ??= this.world.scene.add.image(0, 0, 'props', 'saddle').setOrigin(0.5, 0.62);
+    const p = this.saddle;
+    this.saddleImg.setVisible(this.sprite.visible).setPosition(Math.round(p.x), Math.round(p.y)).setRotation(p.rot).setFlipX(this.facing < 0).setDepth(this.sprite.depth + 0.5);
+  }
   get voiceProfile(): { pitch: number; rough: number; size: number } { return { pitch: (this.rec.genes.seed % 100) / 100, rough: this.ph.personality.aggression, size: this.s }; }
   get label(): string { return this.rec.met && (this.rec.observed > 0.25 || this.rec.bonded) ? this.rec.name : '???'; }
   get stageLabel(): string { return STAGE_LABEL[bondStage(this.rec)]; }
@@ -172,6 +188,7 @@ export class Dragon implements Damageable {
     this.sprite.setOrigin(ox, DRAGON_OY / DRAGON_FH).setFlipX(this.facing < 0).setPosition(Math.round(b.x), Math.round(b.y) + 1);
     if (this.hitFlash > 0) this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL); else this.sprite.clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
     this.trap?.setPosition(Math.round(b.x), Math.round(b.y) + 2);
+    this.syncSaddle(this.ready && game.canRide(this.rec));
   }
 
   setAnim(a: DragonAnim): void { this.play(a); }
@@ -190,6 +207,6 @@ export class Dragon implements Damageable {
     }
   }
 
-  destroy(): void { this.sprite.destroy(); this.emote.destroy(); this.trap?.destroy(); }
+  destroy(): void { this.sprite.destroy(); this.emote.destroy(); this.trap?.destroy(); this.saddleImg?.destroy(); }
 }
 const b = (d: Dragon): Body => d.body;

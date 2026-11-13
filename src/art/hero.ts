@@ -15,6 +15,8 @@ const LEATHER = ramp(0x7c4a2e), SCARF = ramp(0xe4533c), BLADE = ramp(0xd8e6dc), 
 const OUT = 0x1a1424;
 
 const GROUND = 44, HIP_Y = 34, CX = 22;
+/** Riding frames sit the hip this many px below the standing hip, i.e. 44 - (34 + 4) = 6px above the sprite origin. */
+export const RIDE_HIP_DY = 4, RIDE_HIP_ABOVE_ORIGIN = GROUND - HIP_Y - RIDE_HIP_DY;
 const dir = (a: number, l: number): [number, number] => [Math.sin(deg(a)) * l, Math.cos(deg(a)) * l];
 
 function leg(p: Pix, hx: number, hy: number, fx: number, fy: number, back: boolean): void {
@@ -165,7 +167,8 @@ export function heroPose(anim: HeroAnim, i: number): Pose {
     case 'pet': { const s = [96, 108, 96, 84][i]; return P({ hy: 1, lean: 8, aF: [s, s + 8], aB: [-5, 10], fF: [5, 0], fB: [-4, 0], scarf: 76, wave: ph }); }
     case 'calm': return P({ hy: 3, lean: 14, headY: 1, aF: [42, 66 + i * 5], aB: [36, 58 + i * 5], fF: [4, 0], fB: [-4, 0], eye: 'closed', scarf: 82, wave: i * 2 });
     case 'whistle': return P({ lean: -2, aF: [115, 200 + i * 6], aB: [-10, 5], scarf: 70, wave: i * 2 });
-    case 'ride': return P({ air: true, hy: 0, lean: 10 + i * 22, fF: [5, 4], fB: [3, 4], aF: [60 + i * 10, 85], aB: [55, 80], scarf: 30 - i * 25, wave: i * 2 });
+    // seated astride the saddle: hip at (CX, HIP_Y + RIDE_HIP_DY), thigh forward, shin down, both hands on the reins
+    case 'ride': return P({ air: true, hy: RIDE_HIP_DY, lean: [14, 34][i], headY: i, fF: [5.5, 3], fB: [4.5, 3.4], aF: [[58, 96], [74, 108]][i] as [number, number], aB: [[50, 90], [66, 102]][i] as [number, number], scarf: [22, -4][i], wave: i * 2.2 });
     case 'swim': return P({ air: true, hy: 2, lean: 62, fF: [-6, 8 + Math.sin(ph) * 1.5], fB: [-8, 8 - Math.sin(ph) * 1.5], aF: [70 + Math.sin(ph) * 60, 80 + Math.sin(ph) * 50], aB: [70 - Math.sin(ph) * 60, 80 - Math.sin(ph) * 50], scarf: 10, wave: ph });
   }
 }

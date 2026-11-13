@@ -177,6 +177,15 @@ const nest: Painter = (p) => { const r = ramp(0x8a6a3a); for (let i = 0; i < 40;
 const egg = (c: number): Painter => (p) => { const r = ramp(c); p.ball(4.5, 6.5, 4, 5.5, r); p.px(3, 5, r[0]); p.px(6, 8, r[0]); p.px(5, 3, r[0]); p.outline(OUT); };
 const crate: Painter = (p) => { const r = ramp(0x9a6a3e); p.rect(0, 0, 14, 14, r[2]); p.rect(0, 0, 14, 2, r[3]); p.rect(0, 12, 14, 2, r[1]); p.rect(0, 0, 2, 14, r[3]); p.rect(12, 0, 2, 14, r[1]); p.line(2, 2, 11, 11, r[1]); p.line(11, 2, 2, 11, r[1]); p.outline(OUT); };
 const trap: Painter = (p) => { const r = ramp(0x8a7a5a), m = ramp(0x777a88); for (let i = 0; i <= 6; i++) { p.line(2 + i * 5, 2, 2 + i * 5 + (i - 3), 22, r[2]); p.line(2, 2 + i * 3.3, 32, 2 + i * 3.3 + Math.sin(i) * 1.5, r[1]); } p.rect(0, 20, 4, 4, m[2]); p.rect(30, 20, 4, 4, m[2]); p.px(1, 21, m[4]); p.px(31, 21, m[4]); };
+/** Riding saddle: quilted blanket + leather seat with a raised pommel, sits on the dragon's back. */
+const saddle: Painter = (p) => {
+  const bl = ramp(0xc8463a), le = ramp(0x8a5a34), go = ramp(0xf2c14e);
+  p.poly([[1, 5], [17, 5], [16, 10], [2, 10]], bl[2]); p.line(1, 5, 17, 5, bl[4]); p.line(2, 10, 16, 10, bl[0]);
+  for (let x = 3; x < 16; x += 3) p.px(x, 8, go[3]);
+  p.poly([[4, 6], [14, 6], [13, 3], [11, 4], [7, 4], [5, 2]], le[2]); p.line(5, 2, 7, 4, le[4]); p.line(7, 4, 11, 4, le[3]); p.line(4, 6, 14, 6, le[0]);
+  p.rect(13, 2, 2, 2, le[3]); p.px(13, 1, go[3]); p.line(9, 6, 9, 10, le[1]); p.px(9, 9, go[4]);
+  p.outline(OUT);
+};
 const relic: Painter = (p) => { const r = ramp(0x4fd6c0); p.poly([[5, 0], [9, 5], [6, 11], [2, 8], [1, 3]], r[2]); p.poly([[5, 0], [5, 6], [1, 3]], r[4]); p.poly([[6, 11], [9, 5], [5, 6]], r[1]); p.outline(0x0a3a40); };
 const deadTree = (r: Ramp): Painter => (p) => { p.limb(20, 55, 19, 22, 4, 2.2, r); p.limb(19, 30, 8, 14, 1.8, 0.8, r); p.limb(19, 24, 30, 8, 1.8, 0.8, r); p.limb(12, 20, 6, 22, 1, 0.5, r); p.limb(26, 14, 34, 16, 1, 0.5, r); p.limb(19, 22, 18, 6, 1.6, 0.6, r); p.limb(20, 55, 13, 55, 2, 1, r); p.limb(20, 55, 28, 55, 2, 1, r); p.px(18, 40, 0xf2742e); p.px(19, 41, 0xffd27a); p.outline(OUT); };
 const spire = (r: Ramp, h: number): Painter => (p) => { p.poly([[10, 0], [17, h], [2, h]], r[2]); p.poly([[10, 0], [8, h], [2, h]], r[3]); p.poly([[10, 0], [9, h * 0.6], [6, h * 0.5]], r[4]); p.poly([[5, h * 0.5], [9, h], [0, h]], r[1]); p.outline(OUT); };
@@ -217,6 +226,7 @@ export function propDefs(): Record<string, PropDef> {
     vrock: { w: 30, h: 20, paint: rock(V.rock, 30, 19, 7, 0xd0622a) }, emberbush: { w: 26, h: 16, paint: bush(V.leaf, 26, 16, 5, 0xffb347) },
     pine: { w: 56, h: 73, paint: pine(S) }, standing_stone: { w: 16, h: 37, paint: stone(S.rock) }, cairn: { w: 15, h: 15, paint: cairn(S.rock) },
     heather: { w: 26, h: 14, paint: bush(ramp(0x7a6aa8), 26, 14, 9, 0xd0b0ff) }, sgrass: { w: 16, h: 9, paint: grassTuft(S.top, 5) }, srock: { w: 34, h: 22, paint: rock(S.rock, 34, 21, 8, S.moss) },
+    saddle: { w: 18, h: 11, paint: saddle },
     light64: { w: 64, h: 64, paint: light(64) }, light128: { w: 128, h: 128, paint: light(128) },
   };
   return d;

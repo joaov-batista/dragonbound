@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+import { RIDE_HIP_ABOVE_ORIGIN } from '../art/hero';
 import { audio } from '../audio/AudioManager';
 import type { World } from '../core/world';
 import { input } from '../input/InputManager';
@@ -16,7 +18,7 @@ const GRAV = 300;
  */
 export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: boolean): void {
   const b = d.body, f = d.flight, st = d.ph.stats, t = d.mind.traits, rec = d.rec, inp = input;
-  f.rollCd -= dt; f.breathCd -= dt; f.biteCd -= dt; f.rollT -= dt;
+  f.dashCd -= dt; f.breathCd -= dt; f.biteCd -= dt; f.dashT -= dt; f.ghostT -= dt;
   // responsiveness: an untrained, independent dragon lags behind the reins
   const resp = clamp(4.5 + rec.training * 0.09 + st.agility * 3.5 - t.independence * 3 + (rec.trust - 85) * 0.08, 2.5, 16);
   const ix = inp.axisX, iy = inp.axisY * (inp.bindings.invertFlightY ? -1 : 1);
@@ -50,13 +52,21 @@ export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: b
     const flap = inp.pressed('jump') || (inp.down('jump') && f.flapT <= 0);
     f.flapT -= dt;
     if (flap && !tired) { b.vy = Math.min(b.vy, 40) - (130 + st.agility * 40); f.stamina -= 7; f.flapT = 0.36; audio.play('flap', 0.8); w.vfx.puff(b.x - d.facing * 10, b.y - 10, 0xffffff, 3, { speed: 40, gravity: 60, spread: 40 }); }
-    if (inp.pressed('dash') && f.rollCd <= 0 && f.stamina > 10) { f.rollT = 0.32; f.rollCd = 0.9; f.stamina -= 14; b.vx = d.facing * Math.max(speed, maxV) * 1.35; audio.play('dash'); pl.iframes = Math.max(pl.iframes, 0.4); }
+    // dash: a straight burst along the stick (no spin), with after-images and brief invulnerability
+    if (inp.pressed('dash') && f.dashCd <= 0 && f.stamina > 10) {
+      f.dashT = 0.26; f.dashCd = 0.8; f.stamina -= 14; f.ghostT = 0;
+      const dy = Math.abs(f.sy) > 0.3 ? Math.sign(f.sy) * 0.45 : 0, n = Math.hypot(1, dy);
+      b.vx = (d.facing / n) * Math.max(speed, maxV) * 1.6; b.vy = (dy / n) * maxV * 1.2;
+      audio.play('dash'); pl.iframes = Math.max(pl.iframes, 0.35);
+      w.vfx.puff(b.x - d.facing * 16, b.y - 16, 0xffffff, 8, { speed: 70, spread: 60, gravity: 0, life: 300 });
+    }
+    if (f.dashT > 0) { b.vy *= 1 - 3 * dt; if (f.ghostT <= 0) { f.ghostT = 0.04; ghost(d, pl, w); } }
     // wind and weather
     b.vx += wind.x * 1.6 * dt; b.vy += wind.y * 1.9 * dt;
     if (wind.y < -40) f.stamina = Math.min(st.stamina, f.stamina + 14 * dt);
     if (storm && !d.ph.abilities.includes('stormRider')) { f.wobble += dt * (3 + (1 - t.courage) * 4); b.vx += Math.sin(f.wobble * 1.7) * 60 * dt; b.vy += Math.cos(f.wobble) * 90 * (1.3 - t.courage) * dt; }
     if (Math.abs(f.sy) < 0.15 && b.vy > -20) f.stamina = Math.min(st.stamina, f.stamina + 5 * dt);
-    const cap = maxV * (1 + f.boost + (f.rollT > 0 ? 0.4 : 0)) * (tired ? 0.6 : 1);
+    const cap = maxV * (1 + f.boost + (f.dashT > 0 ? 0.6 : 0)) * (tired ? 0.6 : 1);
     b.vx = clamp(b.vx, -cap, cap); b.vy = clamp(b.vy, -250, 340);
     moveBody(w.grid, b, dt);
     if (b.inLiquid !== Liquid.None) { // skim the surface instead of sinking
@@ -80,11 +90,25 @@ export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: b
   if (!d.air) { if (inp.pressed('ability') && f.breathCd <= 0) { f.breathCd = 1; d.setAnim('attack'); d.strike(true); } audio.setWindBoost(0); }
   // rider + sprite
   d.finish(dt, null);
-  const tilt = d.air ? clamp(b.vy / 320, -0.55, 0.55) * d.facing + (f.rollT > 0 ? (0.32 - f.rollT) * 19.6 * d.facing : 0) : 0;
+  const tilt = d.air ? clamp(b.vy / 320, -0.55, 0.55) * d.facing : 0;
   d.sprite.setRotation(tilt);
-  const s = d.saddle;
-  pl.body.x = s.x; pl.body.y = s.y; pl.body.vx = b.vx; pl.body.vy = b.vy; pl.facing = d.facing;
-  pl.sprite.setFrame(Math.abs(b.vx) > maxV * 0.6 ? 'ride_1' : 'ride_0').setRotation(tilt * 0.6).setVisible(f.rollT <= 0 || f.rollT > 0.24 || f.rollT < 0.08);
-  pl.syncSprite();
+  placeRider(d, pl, Math.abs(b.vx) > maxV * 0.6 || f.dashT > 0);
   rec.energy = clamp(rec.energy - dt / 900);
+}
+
+/** Seat the hero on the saddle: hip on the dragon's back, leaning with its pitch. */
+export function placeRider(d: Dragon, pl: Player, fast: boolean): void {
+  const s = d.saddle;
+  pl.facing = d.facing;
+  pl.body.x = s.x; pl.body.y = s.y + RIDE_HIP_ABOVE_ORIGIN; pl.body.vx = d.body.vx; pl.body.vy = d.body.vy;
+  pl.syncSprite();
+  pl.sprite.setFrame(fast ? 'ride_1' : 'ride_0').setRotation(s.rot).setPosition(Math.round(s.x - Math.sin(s.rot) * RIDE_HIP_ABOVE_ORIGIN), Math.round(s.y + Math.cos(s.rot) * RIDE_HIP_ABOVE_ORIGIN)).setVisible(true);
+}
+
+function ghost(d: Dragon, pl: Player, w: World): void {
+  for (const src of [d.sprite, pl.sprite]) {
+    const g = w.scene.add.image(src.x, src.y, src.texture.key, src.frame.name).setOrigin(src.originX, src.originY).setFlipX(src.flipX).setRotation(src.rotation)
+      .setDepth(src.depth - 2).setTint(0x9fe8ff).setTintMode(Phaser.TintModes.FILL).setAlpha(0.5);
+    w.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
+  }
 }

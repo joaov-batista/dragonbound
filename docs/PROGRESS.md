@@ -2,6 +2,13 @@
 
 Última atualização: sessão 1 (construção da base).
 
+## Versão 0.2 beta (sessão 2)
+- Voo: a pirueta foi removida; **dash** em linha reta (ilha e mar) com rastro, invencibilidade breve e custo de fôlego.
+- **Minimapa** no canto superior direito: arquipélago no mar (ilhas descobertas; principais não visitadas como "?"; seta com rumo) e perfil do terreno na ilha (docas, fogueiras, posição).
+- **Cavaleiro**: pose sentada nova, sela no dragão e encaixe calculado pelo rig de cada indivíduo (`saddlePoint` em `DragonPainter.ts`); cavaleiro detalhado na vista de cima.
+- **Tela inicial** refeita: interface fixa (a câmera andava e empurrava os botões para fora), fundo só com céu, nuvens e dragões gerados na hora voando em três profundidades.
+- Rótulos de **beta** no título, menu Sistema, página e README.
+
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
 

@@ -233,6 +233,20 @@ export function drawDragon(out: Pix, ox: number, oy: number, ph: Phenotype, scal
   out.blit(body, 0, 0);
 }
 
+/**
+ * Where a rider's hip sits on this individual's back for a given animation frame, relative to the
+ * frame origin (DRAGON_OX, DRAGON_OY), facing right. Uses exactly the same rig maths as drawDragon.
+ */
+export function saddlePoint(ph: Phenotype, scale: number, anim: DragonAnim, i: number): [number, number] {
+  const q = dragonPose(anim, i), s = ph.size * scale, baby = Math.max(0, 1 - scale) * 0.9;
+  const L = 17.5 * s * ph.bodyLen, G = 8.8 * s * ph.girth * (1 + baby * 0.15);
+  const legLen = (q.lie ? 2.5 : 9.5) * s * ph.legLen * (1 - baby * 0.2);
+  const cy = DRAGON_OY - legLen - G * 0.85 + q.bob - (q.tuck ? 14 * s : 0);
+  const x = L * 0.08, y = -G * 0.93;
+  const [rx, ry] = rot(x, y, -q.tilt);
+  return [rx, cy + ry + q.bow * G * 0.9 * (x / L) - DRAGON_OY];
+}
+
 export function dragonFrameNames(): string[] {
   const names: string[] = [];
   for (const [k, d] of Object.entries(DRAGON_ANIMS)) for (let i = 0; i < d.n; i++) names.push(`${k}_${i}`);
@@ -242,7 +256,8 @@ export function dragonFrameNames(): string[] {
 export interface DragonSheet { pix: Pix; frames: Record<string, { x: number; y: number; w: number; h: number }> }
 
 /** Paint every animation frame of one individual. `scale` is the growth multiplier (0.38..1). */
-export function paintDragonSheet(ph: Phenotype, scale: number): DragonSheet {
+/** `only` limits painting to some animations (others stay blank) — used where a full sheet is not needed. */
+export function paintDragonSheet(ph: Phenotype, scale: number, only?: readonly DragonAnim[]): DragonSheet {
   const rows = Math.ceil(DRAGON_FRAME_COUNT / DRAGON_COLS);
   const pix = new Pix(DRAGON_COLS * DRAGON_FW, rows * DRAGON_FH);
   const frames: DragonSheet['frames'] = {};
@@ -251,7 +266,7 @@ export function paintDragonSheet(ph: Phenotype, scale: number): DragonSheet {
   for (const [anim, d] of Object.entries(DRAGON_ANIMS))
     for (let i = 0; i < d.n; i++, k++) {
       cell.clear();
-      drawDragon(cell, 0, 0, ph, scale, dragonPose(anim as DragonAnim, i));
+      if (!only || only.includes(anim as DragonAnim)) drawDragon(cell, 0, 0, ph, scale, dragonPose(anim as DragonAnim, i));
       const x = (k % DRAGON_COLS) * DRAGON_FW, y = Math.floor(k / DRAGON_COLS) * DRAGON_FH;
       pix.blit(cell, x, y);
       frames[`${anim}_${i}`] = { x, y, w: DRAGON_FW, h: DRAGON_FH };
@@ -278,7 +293,16 @@ export function paintDragonTop(ph: Phenotype, scale: number, rider: boolean): Pi
     c.ball(32 + L * 1.45, 32, 3.4 * s, 2.9 * s, pr); c.limb(32 + L * 1.5, 32, 32 + L * 1.5 + 4.5 * s, 32, 1.9 * s, 1.2 * s, pr);
     if (ph.horns !== 'none') for (const sd of [-1, 1]) c.limb(32 + L * 1.35, 32 + sd * 2 * s, 32 + L * 1.35 - 4 * s, 32 + sd * 4 * s, 0.9, 0.3, hn);
     if (ph.spines !== 'none') for (let j = 0; j < 5; j++) c.px(32 - L * 0.5 + j * L * 0.3, 32, hn[3]);
-    if (rider) { c.ball(33, 32, 2.6, 2.6, ramp(0x3f55a0)); c.px(34, 32, 0xd9955f); c.px(31, 32, 0xe4533c); c.px(30, 31, 0xe4533c); }
+    if (rider) {
+      // top-down rider: saddle blanket, shoulders, arms on the reins, hair + headband, scarf streaming back
+      const tun = ramp(0x3f55a0), skin = ramp(0xd9955f), hair = ramp(0x33283f);
+      c.rect(28, 29, 6, 7, 0xc8463a); c.rect(28, 29, 6, 1, 0xf2c14e); c.rect(28, 35, 6, 1, 0xf2c14e);
+      for (let k = 0; k < 4; k++) { const y = 32 + Math.sin(f * 1.57 + k) * 0.8 * (k / 3); c.px(27 - k * 1.6, y, k < 2 ? 0xe4533c : 0xb8352a); c.px(27 - k * 1.6, y + 1, 0xb8352a); }
+      c.ball(31, 32, 2.4, 3.2, tun);
+      c.line(32, 30, 35, 31, skin[2]); c.line(32, 34, 35, 33, skin[2]); c.px(35, 31, skin[3]); c.px(35, 33, skin[3]);
+      c.line(35, 32, 39 + L * 0.1, 32, 0x7c4a2e);
+      c.ball(32.5, 32, 1.8, 1.8, hair); c.px(33, 32, skin[2]); c.px(32, 31, 0xf2c14e); c.px(32, 33, 0xf2c14e);
+    }
     c.outline(OUT);
     pix.blit(c, f * 64, 0);
   }

@@ -3,6 +3,7 @@ import { audio } from '../audio/AudioManager';
 import { events } from '../core/events';
 import { hud } from '../core/hud';
 import { saveSettings, settings, type Quality } from '../core/settings';
+import { VERSION } from '../core/constants';
 import { ITEM_NAMES, USABLE, game } from '../core/state';
 import { STAGE_LABEL, bondStage, type DragonRecord } from '../dragons/DragonRecord';
 import { SPECIES } from '../dragons/genetics/species';
@@ -101,6 +102,7 @@ export class Menu {
       }
       case 'system': return [
         { label: 'Continuar', select: () => this.hide() },
+        { label: `Dragonbound ${VERSION} (beta)`, value: 'em desenvolvimento' },
         { label: 'Salvar agora', select: () => { game.persist().then(() => { this.status = 'Jogo salvo.'; this.draw(); }).catch((e: Error) => { this.status = e.message; this.draw(); }); } },
         { label: 'Exportar save (arquivo)', select: () => { SaveManager.download(game.save); this.status = 'Arquivo de save gerado.'; } },
         { label: 'Importar save (arquivo)', select: () => { SaveManager.pickFile().then(async (s) => { game.loadFrom(s); await game.persist(); this.hide(); this.onTitle(); }).catch((e: Error) => { this.status = 'Falha ao importar: ' + e.message; this.draw(); }); } },

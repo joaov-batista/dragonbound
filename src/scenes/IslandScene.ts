@@ -15,7 +15,7 @@ import { Enemy } from '../entities/Enemy';
 import { buildInteractables, type Interactable } from '../entities/Interactables';
 import { input } from '../input/InputManager';
 import { rectsOverlap, type Rect } from '../physics/Body';
-import { Liquid, type TileGrid } from '../physics/TileGrid';
+import { Cell, Liquid, type TileGrid } from '../physics/TileGrid';
 import { Player } from '../player/Player';
 import { VfxManager } from '../vfx/VfxManager';
 import { Backdrop, mulColor } from '../world/Backdrop';
@@ -25,6 +25,7 @@ import { IslandView } from '../world/IslandView';
 import type { IslandData } from '../world/islands/types';
 import { WeatherFx } from '../world/WeatherFx';
 import { mix } from '../art/Pix';
+import { THEMES } from '../art/themes';
 
 export interface IslandEntry { islandId: string; entry: 'load' | 'dock' | 'air-west' | 'air-east' | 'respawn' }
 
@@ -89,11 +90,44 @@ export class IslandScene extends Phaser.Scene {
       if (d) { d.build(); d.body.x = px; d.body.y = py; d.facing = this.entry.entry === 'air-west' ? 1 : -1; d.body.vx = d.facing * 120; this.doMount(d, true); d.air = true; d.flight.airborne = true; }
     }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.shots.clear(); DragonTextures.dispose(this); input.clearVirtual(); });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { hud.minimap = null; this.shots.clear(); DragonTextures.dispose(this); input.clearVirtual(); });
     events.emit('areaTitle', { title: this.island.name, subtitle: this.island.subtitle });
     hud.mode = this.mount ? 'flight' : 'ground'; hud.prompt = null; hud.dialog = null;
+    this.paintMinimap();
     this.applyAmbience(0);
     if (DEBUG) (window as unknown as Record<string, unknown>).__scene = this;
+  }
+
+  /** Side-profile minimap of the island (terrain, water, docks, campfires), painted once per visit. */
+  static readonly MM_W = 96; static readonly MM_H = 40; static readonly MM_ROWS = 52;
+  private mmTop = 0;
+  private paintMinimap(): void {
+    const g = this.grid, W = IslandScene.MM_W, H = IslandScene.MM_H, th = THEMES[this.island.biome];
+    if (this.textures.exists('mm-island')) this.textures.remove('mm-island');
+    const tex = this.textures.createCanvas('mm-island', W, H)!, c = tex.context, img = c.createImageData(W, H);
+    this.mmTop = this.island.seaRow - (IslandScene.MM_ROWS - 6);
+    const put = (x: number, y: number, col: number, a = 255): void => { const i = (y * W + x) * 4; img.data[i] = (col >> 16) & 255; img.data[i + 1] = (col >> 8) & 255; img.data[i + 2] = col & 255; img.data[i + 3] = a; };
+    for (let mx = 0; mx < W; mx++) {
+      const tx = Math.min(g.w - 1, Math.floor(((mx + 0.5) / W) * g.w));
+      let top = true;
+      for (let my = 0; my < H; my++) {
+        const ty = this.mmTop + Math.floor(((my + 0.5) / H) * IslandScene.MM_ROWS);
+        const solid = g.cell(tx, ty) === Cell.Solid, liq = g.inb(tx, ty) ? g.liquid[ty * g.w + tx] : 0;
+        if (solid) { put(mx, my, top ? th.top[3] : my % 3 ? th.soil[1] : th.rock[1]); top = false; }
+        else if (liq) put(mx, my, liq === Liquid.Lava ? 0xe8501c : th.water, 210);
+        else { put(mx, my, 0x0c0e1a, 110); }
+      }
+    }
+    c.putImageData(img, 0, 0);
+    for (const sp of this.island.spawns) if (sp.t === 'dock' || sp.t === 'campfire') {
+      const x = Math.round((sp.x / g.pxW) * W), y = Math.round(((sp.y / TILE - this.mmTop) / IslandScene.MM_ROWS) * H);
+      c.fillStyle = sp.t === 'dock' ? '#f4f0e6' : '#ffa040'; c.fillRect(x - 1, y - 2, 2, 2);
+    }
+    tex.refresh(); hud.mmVersion++;
+  }
+  private feedMinimap(): void {
+    const b = this.mount ? this.mount.body : this.player.body;
+    hud.minimap = { kind: 'island', fx: b.x / this.grid.pxW, fy: (b.y / TILE - this.mmTop) / IslandScene.MM_ROWS, flying: !!this.mount?.air, facing: this.mount ? this.mount.facing : this.player.facing };
   }
 
   /** `World.scene` for entities (Phaser reserves `this.scene` for the scene plugin). */
@@ -338,6 +372,7 @@ export class IslandScene extends Phaser.Scene {
     this.updateThings(dt);
     this.updateWorldFx(time, dt);
     this.updateCamera(dt);
+    this.feedMinimap();
 
     // death → respawn at the last campfire
     if (pl.deadDone && !this.leaving) {
