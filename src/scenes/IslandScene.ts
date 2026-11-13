@@ -330,7 +330,7 @@ export class IslandScene extends Phaser.Scene {
       hitstop: (s) => self.hitstop(s), shake: (i, ms) => self.shake(i, ms), spawnProjectile: (p) => lane.shots.spawn(p),
       strike: (r, d, e, f, x, s, ex, o) => self.strikeIn(lane, r, d, e, f, x, s, ex, o), windAt: (x, y) => self.windIn(lane, x, y),
       foes: () => lane.enemies.filter((e) => e.alive),
-      flash: (ms, c) => { if (settings.screenShake > 0) self.overlayCam.flash(ms, (c >> 16) & 255, (c >> 8) & 255, c & 255, false); },
+      flash: (ms, c) => self.impactFlash(ms, c),
     };
   }
   private get worldRef(): World { return this.lane.world; }
@@ -795,6 +795,16 @@ export class IslandScene extends Phaser.Scene {
       if (!this.grid.solidPx(x, y)) { const s = this.add.image(x, y, 'ocean', 'streak').setDepth(DEPTH.weather).setAlpha(0.5).setRotation(Math.atan2(z.vy, z.vx || 0.001)); this.tweens.add({ targets: s, x: x + z.vx * 0.5, y: y + z.vy * 0.5, alpha: 0, duration: 500, onComplete: () => s.destroy() }); }
     }
     if (Math.floor(time / 500) !== Math.floor((time - dt * 1000) / 500)) this.applyAmbience(this.caveK);
+  }
+
+  /** Short, soft impact flash (a translucent tint, never a full white-out). */
+  private flashRect: Phaser.GameObjects.Rectangle | null = null;
+  impactFlash(ms: number, color: number): void {
+    if (settings.screenShake <= 0) return;
+    if (!this.flashRect || !this.flashRect.scene) { const prev = this.tagCam; this.tagCam = this.overlayCam; this.flashRect = this.add.rectangle(0, 0, 10, 10, 0xffffff, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint + 3).setBlendMode(Phaser.BlendModes.ADD); this.tagCam = prev; }
+    const r = this.flashRect; this.tweens.killTweensOf(r);
+    r.setSize(this.scale.width + 4, GAME_H + 4).setFillStyle(color, 0.28).setAlpha(1);
+    this.tweens.add({ targets: r, alpha: 0, duration: ms * 2, ease: 'Quad.Out' });
   }
 
   /** Flight immersion: the view pulls back with speed, rumbles on low passes, and clouds wash over the screen. */
