@@ -52,6 +52,23 @@
 - No mar, a câmera aproxima das ondas no mergulho, com vinheta em velocidade máxima.
 - **Opções → Câmera de voo dinâmica** (0/50/100%) desliga ou suaviza tudo isso. O tremor também respeita a opção "Tremor de tela".
 
+## Combate com dragões (sessão 3)
+Os golpes ficam em `src/dragons/DragonCombat.ts` e valem para a montaria e para os dragões vinculados que lutam sozinhos.
+- **Atacar (J):** combo de garra, depois corte, depois um golpe final. No chão o final é uma **rabada** (onda de choque dos dois lados, arremessa). No ar é um **tapa voando**: o dragão gira e acerta tudo em volta. O dragão avança sozinho até o inimigo mais próximo, então é fácil acertar.
+- **Habilidade (I):**
+  - Toque rápido: **tiro elemental** com rastro, que mira sozinho no inimigo mais próximo à frente.
+  - Segurar e soltar: **bola de poder**. A energia converge para a boca e, ao soltar, a bola explode em área com o efeito do elemento (explosão de fogo, onda de água, folhas, trovão, espinhos de terra, nova de gelo). O tamanho e o dano crescem com a carga.
+- **Impacto:** cada acerto tem pausa de impacto, tremor, faíscas na cor do elemento e repulsão forte. A bola de poder ainda dá um clarão na tela.
+- **Dragões do grupo:** além do combo corpo a corpo, atiram enquanto se aproximam e às vezes soltam bolas de poder.
+
+## Tela mais limpa (sessão 3)
+- A missão mostra só o título. O detalhe aparece por alguns segundos quando a missão muda, e o rastreador some durante voo e chefes.
+- As moedas só aparecem quando mudam e na loja.
+- O painel do dragão em foco some quando você está montado.
+- No máximo dois avisos na tela, mais curtos e sem repetição. O aviso de troca de camada saiu (o minimapa já mostra a camada).
+- Saques viram texto flutuante no lugar, em vez de aviso.
+- Os moradores falam bem menos.
+
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
 

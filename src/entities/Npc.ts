@@ -15,7 +15,7 @@ const KIDS = new Set(['ivo', 'lia']), WORKERS = new Set(['olvar']), NIGHT_OWLS =
 export class Npc {
   body: Body; sprite: Phaser.GameObjects.Sprite; marker: Phaser.GameObjects.Image; bubble: Phaser.GameObjects.Container | null = null;
   interactable: Interactable;
-  private dir = 1; private t = 0; private walkT = 0; private bubbleT = 0; private chatCd = 4 + Math.random() * 6; private chatIdx = 0; private anim = '';
+  private dir = 1; private t = 0; private walkT = 0; private bubbleT = 0; private chatCd = 10 + Math.random() * 14; private chatIdx = 0; private anim = '';
   private readonly x0: number; private readonly x1: number; private readonly homeX: number;
 
   constructor(private world: World, readonly who: string, x: number, y: number, range: number) {
@@ -83,8 +83,8 @@ export class Npc {
     // ambient chatter when the player is around
     if (this.bubble && !active) { this.bubble.destroy(); this.bubble = null; }
     if (this.bubble) { this.bubble.setPosition(Math.round(b.x), Math.round(b.y - 40)); if ((this.bubbleT -= dt) <= 0) { this.bubble.destroy(); this.bubble = null; } }
-    else if (active && this.sprite.visible && !away && this.chatCd <= 0 && Math.abs(px - b.x) < 120 && !near) {
-      this.chatCd = 9 + Math.random() * 10;
+    else if (active && this.sprite.visible && !away && this.chatCd <= 0 && Math.abs(px - b.x) < 90 && !near) {
+      this.chatCd = 22 + Math.random() * 20;
       const line = ambientLine(this.who, this.chatIdx++);
       if (line) this.say(line);
     }

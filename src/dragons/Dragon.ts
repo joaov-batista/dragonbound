@@ -3,6 +3,7 @@ import { audio } from '../audio/AudioManager';
 import { DEPTH } from '../core/constants';
 import { events } from '../core/events';
 import { game } from '../core/state';
+import { melee, newCombat, releaseOrb, shoot, tickCombat, type CombatState } from './DragonCombat';
 import type { Damageable, World } from '../core/world';
 import { makeBody, moveBody, type Body } from '../physics/Body';
 import { Liquid } from '../physics/TileGrid';
@@ -24,6 +25,8 @@ const ELEMENT_FX: Record<Element, { fx: string; sfx: 'fire' | 'water' | 'spore' 
 /** A living dragon in an island scene: body + sprite + mind. */
 export class Dragon implements Damageable {
   readonly ph: Phenotype; readonly mind: DragonMind;
+  /** battle moves state (combo, cooldowns, power-orb charge) */
+  combat: CombatState = newCombat();
   body: Body; sprite: Phaser.GameObjects.Sprite; emote: Phaser.GameObjects.Image; trap: Phaser.GameObjects.Image | null = null;
   alive = true; facing = 1; air = false; ridden = false; ready = false; far = false;
   flight: FlightState;
@@ -143,7 +146,17 @@ export class Dragon implements Damageable {
     const it = (this.intent = this.mind.update({ ...p, dt, x: b.x, y: b.y, grounded: b.onGround, stuck: this.stuck }));
     if (it.face) this.facing = it.face;
     if (it.vocal) this.vocalize(it.vocal, p.player.x);
-    if (it.strike) this.strike(rec.bonded, it.tx + this.facing * 30);
+    if (rec.bonded) tickCombat(this.combat, dt);
+    if (it.strike) {
+      if (!rec.bonded) this.strike(false, it.tx + this.facing * 30);
+      else {
+        // bonded dragons fight with the full move set: melee up close, shots and power orbs from range
+        const dist = Math.abs((it.strikeX ?? it.tx) - b.x);
+        if (dist < 90) { this.combat.atkCd = 0; melee(this); }
+        else if (Math.random() < 0.28) releaseOrb(this, 0.55);
+        else { this.combat.shotCd = 0; shoot(this); }
+      }
+    }
 
     const canFly = this.ph.stats.flySpeed > 0 && !rec.injured && !rec.trapped && game.stage(rec) !== 'hatchling';
     const dx = it.tx - b.x, dy = it.ty - b.y;

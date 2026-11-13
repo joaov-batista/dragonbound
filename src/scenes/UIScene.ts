@@ -9,7 +9,6 @@ import { keyLabel, padBindLabel, type Action } from '../input/actions';
 import { input } from '../input/InputManager';
 import { COL, bar, panel, txt, wrap } from '../ui/kit';
 import { OCEAN_H, OCEAN_W, allSites } from '../world/generation/archipelago';
-import { LANE_NAMES } from '../world/islands/lanes';
 import { Menu } from '../ui/Menu';
 import { Shop } from '../ui/Shop';
 import { NAMES, tracked, type Talk } from '../story/story';
@@ -29,6 +28,8 @@ export class UIScene extends Phaser.Scene {
   private talk: { t: Talk; page: number; sel: number } | null = null; private talkFresh = false; private talkHit: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
   private qTitle!: Phaser.GameObjects.BitmapText; private qText!: Phaser.GameObjects.BitmapText; private qIcon!: Phaser.GameObjects.Image;
   private coinIcon!: Phaser.GameObjects.Image; private coinText!: Phaser.GameObjects.BitmapText;
+  /** declutter: the quest detail and the purse only show for a while after they change */
+  private qKey = ''; private qShowT = 0; private coins = -1; private coinT = 0;
   private bossName!: Phaser.GameObjects.BitmapText; private bossBar!: ReturnType<typeof bar>;
   private mm!: Phaser.GameObjects.Container; private mmImg!: Phaser.GameObjects.Image; private mmGfx!: Phaser.GameObjects.Graphics; private mmBg!: Phaser.GameObjects.NineSlice; private mmLabel!: Phaser.GameObjects.BitmapText;
   private laneGfx!: Phaser.GameObjects.Graphics; private laneLabel!: Phaser.GameObjects.BitmapText;
@@ -96,8 +97,11 @@ export class UIScene extends Phaser.Scene {
     c.add(this.add.rectangle(-5, -1, w, t.height + 5, 0x0c0e1a, 0.78).setOrigin(0)); c.add(t);
     if (icon) c.add(this.add.image(2, 7, 'ui', icon).setScale(0.6));
     c.setData('w', w); c.setData('h', t.height + 7);
-    this.toasts.push({ c, t: 3.2 + text.length * 0.03 });
-    if (this.toasts.length > 4) this.toasts.shift()!.c.destroy();
+    // fewer, shorter notices: at most two on screen, an identical one only refreshes
+    const dup = this.toasts.find((x) => x.c.getData('text') === text); if (dup) { dup.t = 2.4; c.destroy(); return; }
+    c.setData('text', text);
+    this.toasts.push({ c, t: Math.min(3.2, 2 + text.length * 0.02) });
+    while (this.toasts.length > 2) this.toasts.shift()!.c.destroy();
   }
 
   /** Conversation box: speaker name, pages of text, optional choices (and a market button for shopkeepers). */
@@ -178,7 +182,7 @@ export class UIScene extends Phaser.Scene {
           lg.fillStyle(on ? 0xf2c14e : reachable ? 0x3a4468 : 0x1d2238, 1).fillRect(x, y, w, 6);
           lg.lineStyle(1, on ? 0xffffff : reachable ? 0xd8dcef : 0x3a4468, 1).strokeRect(x, y, w, 6);
         });
-        this.laneLabel.setText(LANE_NAMES[L.active] ?? '').setOrigin(0.5, 0).setPosition(52, y0 + 26);
+        this.laneLabel.setText('');
       } else this.laneLabel.setText('');
     }
     const top = this.touch.visible ? 30 : 4;
@@ -243,7 +247,7 @@ export class UIScene extends Phaser.Scene {
     if (holding) this.holdBar.set(hud.bondHold);
     // focused dragon
     const r = showHud && hud.focusId ? game.save.dragons[hud.focusId] : null;
-    this.dPanel.setVisible(!!r).setX(Math.round(W / 2 - 75));
+    this.dPanel.setVisible(!!r && hud.mode === 'ground').setX(Math.round(W / 2 - 75));
     if (r) {
       const ph = game.phenotype(r), known = r.bonded || r.observed > 0.25;
       this.dName.setText(known ? r.name : '???').setTint(r.bonded ? COL.teal : COL.text);
@@ -256,14 +260,22 @@ export class UIScene extends Phaser.Scene {
     for (const t of this.toasts) { t.c.setVisible(!this.menu.open).setPosition(Math.round(W / 2 - (t.c.getData('w') as number) / 2 + 5), ty).setAlpha(Math.min(1, t.t * 2)); ty += t.c.getData('h') as number; }
     this.fps.setVisible(settings.showFps).setText(settings.showFps ? `${Math.round(hud.fps)} fps · ${hud.entities} ent · ${hud.fxCount} fx` : '').setPosition(4, H - 14);
     this.drawMinimap(showHud, W);
-    const tq = showHud && !hud.dialog ? tracked() : null;
+    const tq = ground && !hud.dialog && !hud.boss ? tracked() : null;
     this.qIcon.setVisible(!!tq); this.qTitle.setVisible(!!tq); this.qText.setVisible(!!tq);
-    if (tq) { const y0 = ground ? 66 : 44; this.qIcon.setY(y0 + 7); this.qTitle.setText(tq.def.title).setY(y0); this.qText.setText(wrap(this, tq.stage.text, Math.min(170, W * 0.38))).setY(y0 + 12); }
-    this.coinIcon.setVisible(ground); this.coinText.setVisible(ground).setText(`${p.items.coin ?? 0}`);
+    if (tq) {
+      const key = tq.def.id + '|' + tq.stage.text; if (key !== this.qKey) { this.qKey = key; this.qShowT = 7; }
+      this.qShowT -= dt;
+      const y0 = 66, full = this.qShowT > 0;
+      this.qIcon.setY(y0 + 7).setAlpha(full ? 1 : 0.6); this.qTitle.setText(tq.def.title).setY(y0).setAlpha(full ? 1 : 0.6);
+      this.qText.setVisible(full).setText(wrap(this, tq.stage.text, Math.min(170, W * 0.38))).setY(y0 + 12).setAlpha(Math.min(1, this.qShowT));
+    }
+    const coins = p.items.coin ?? 0; if (coins !== this.coins) { if (this.coins >= 0) this.coinT = 3.5; this.coins = coins; }
+    this.coinT -= dt; const showCoins = ground && (this.coinT > 0 || this.shop.open);
+    this.coinIcon.setVisible(showCoins).setAlpha(Math.min(1, Math.max(0, this.coinT * 2) + (this.shop.open ? 1 : 0))); this.coinText.setVisible(showCoins).setText(`${coins}`).setAlpha(this.coinIcon.alpha);
     const bs = showHud ? hud.boss : null;
     this.bossName.setVisible(!!bs); this.bossBar.objs.forEach((o) => (o as Phaser.GameObjects.Rectangle).setVisible(!!bs));
     if (bs) { const by = H - (this.touch.visible ? 150 : 46); this.bossName.setText(bs.name).setPosition(Math.round(W / 2), by - 14); this.bossBar.objs.forEach((o, i) => (o as Phaser.GameObjects.Rectangle).setPosition(W / 2 - 90 + (i ? 1 : 0), by + (i ? 1 : 0))); this.bossBar.set(bs.hp / bs.max); }
     this.compass.setVisible(showHud && !!hud.compass);
-    if (hud.compass) this.compass.setText(hud.compass.label).setPosition(Math.round(W / 2), 6 + (r ? 44 : 0));
+    if (hud.compass) this.compass.setText(hud.compass.label.split(' · ').filter((_, i) => i !== 1).join(' · ')).setPosition(Math.round(W / 2), 6 + (r ? 44 : 0));
   }
 }

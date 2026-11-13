@@ -18,7 +18,7 @@ export interface Percept {
 
 export interface Intent {
   state: MindState; tx: number; ty: number; speed: number; fly: boolean; anim: DragonAnim; emote: IconId | null;
-  face: number; strike: boolean; ateWorldFood: boolean; tookOffer: boolean; vocal: 'chirp' | 'growl' | 'roar' | 'purr' | 'whine' | null;
+  face: number; strike: boolean; /** where the strike is aimed (x of the target) */ strikeX?: number; ateWorldFood: boolean; tookOffer: boolean; vocal: 'chirp' | 'growl' | 'roar' | 'purr' | 'whine' | null;
 }
 
 /**
@@ -206,8 +206,12 @@ export class DragonMind {
         if (!tg) { this.state = 'rest'; break; }
         const dx = tg.x - p.x; out.face = Math.sign(dx) || 1; out.emote = 'e_anger';
         const range = 46 * this.ph.size;
-        if (Math.abs(dx) > range || Math.abs(tg.y - p.y) > 40) { goto(tg.x - out.face * range * 0.8, tg.y, 1); out.anim = 'walk'; }
-        else if (this.strikeCd <= 0) { out.strike = true; out.anim = 'attack'; this.strikeCd = 1.5 - t.aggression * 0.5; this.lock = 0.45; voc('roar', 2); }
+        if (Math.abs(dx) > range || Math.abs(tg.y - p.y) > 40) {
+          goto(tg.x - out.face * range * 0.8, tg.y, 1); out.anim = 'walk';
+          // bonded dragons shoot while closing in
+          if (r.bonded && Math.abs(dx) < 300 && this.strikeCd <= 0) { out.strike = true; out.strikeX = tg.x; this.strikeCd = 1.1 - t.aggression * 0.3; voc('roar', 3); }
+        }
+        else if (this.strikeCd <= 0) { out.strike = true; out.strikeX = tg.x; out.anim = 'attack'; this.strikeCd = (r.bonded ? 0.8 : 1.5) - t.aggression * 0.5; this.lock = 0.45; voc('roar', 2); }
         else out.anim = this.strikeCd > 1 ? 'attack' : 'alert';
         if (!r.bonded && tg === pl && (pl.dist > r.homeR * 1.4 || this.stateT > 7)) { this.anger = Math.max(0, this.anger - 0.5); if (this.anger < 0.3) this.state = 'rest'; }
         break;

@@ -34,7 +34,7 @@ export function buildInteractables(ctx: InteractCtx, spawns: Spawn[]): Interacta
         out.push({ kind: 'pickup', id: s.id, x: s.x, y: s.y - 8, range: 14, auto: true, prompt: () => null,
           use: () => { if (gone) return; gone = true; st.taken.push(s.id); game.addItem(s.item); g.destroy(); glow?.destroy(); w.vfx.play('collect', s.x, s.y, { scale: 0.7 }); audio.play(relic ? 'chest' : 'pickup');
             if (s.secret) { setFlag(s.secret); const n = ['secret_cellar', 'secret_pier', 'secret_falls'].filter((k) => flag(k)).length; w.vfx.play('levelup', s.x, s.y, { scale: 0.7 }); events.emit('toast', { text: `Segredo de Vigiamar encontrado! (${n}/3)`, icon: 'star' }); }
-            else events.emit('toast', { text: relic ? `Fragmento antigo (${game.save.stats.relics})` : `+1 ${ITEM_NAMES[s.item]}`, icon: s.item }); },
+            else if (relic) events.emit('toast', { text: `Fragmento antigo (${game.save.stats.relics})`, icon: s.item }); else w.vfx.floatText(s.x, s.y - 18, `+1 ${ITEM_NAMES[s.item]}`, 0xd8f0c0); },
           food: () => (gone || relic || s.item === 'shell' ? null : s.item), eaten: () => { if (!gone) { gone = true; g.destroy(); } } });
         break;
       }
@@ -44,7 +44,7 @@ export function buildInteractables(ctx: InteractCtx, spawns: Spawn[]): Interacta
         const sync = (): void => { g.setFrame(grown() ? 'berrybush' : 'berrybush_empty'); };
         sync();
         out.push({ kind: 'bush', id: s.id, x: s.x, y: s.y - 8, range: 22, prompt: () => (grown() ? 'Colher frutas' : null),
-          use: () => { if (!grown()) return; st.regrow[s.id] = game.day + 0.35; sync(); game.addItem('berry', 2); audio.play('pickup'); w.vfx.puff(s.x, s.y - 10, 0x4f9a3c, 6); events.emit('toast', { text: '+2 Frutas silvestres', icon: 'berry' }); },
+          use: () => { if (!grown()) return; st.regrow[s.id] = game.day + 0.35; sync(); game.addItem('berry', 2); audio.play('pickup'); w.vfx.puff(s.x, s.y - 10, 0x4f9a3c, 6); w.vfx.floatText(s.x, s.y - 22, '+2 Frutas', 0xd8f0c0); },
           food: () => (grown() ? 'berry' : null), eaten: () => { st.regrow[s.id] = game.day + 0.3; sync(); w.vfx.puff(s.x, s.y - 10, 0x4f9a3c, 5); }, update: () => { if (Math.random() < 0.01) sync(); } });
         break;
       }
@@ -52,7 +52,7 @@ export function buildInteractables(ctx: InteractCtx, spawns: Spawn[]): Interacta
         const fx = w.vfx.play('ripples', s.x, s.y + 4, { loop: true, scale: 0.6, alpha: 0.8, depth: DEPTH.liquid + 2 });
         const ready = (): boolean => (st.regrow[s.id] ?? 0) <= game.day;
         out.push({ kind: 'fishspot', id: s.id, x: s.x, y: s.y, range: 36, prompt: () => (ready() ? 'Pescar' : null),
-          use: () => { if (!ready()) return; st.regrow[s.id] = game.day + 0.12; game.addItem('fish'); audio.play('splash'); w.vfx.play('splash', s.x, s.y + 2, { scale: 0.6 }); events.emit('toast', { text: '+1 Peixe', icon: 'fish' }); },
+          use: () => { if (!ready()) return; st.regrow[s.id] = game.day + 0.12; game.addItem('fish'); audio.play('splash'); w.vfx.play('splash', s.x, s.y + 2, { scale: 0.6 }); w.vfx.floatText(s.x, s.y - 14, '+1 Peixe', 0xd8f0c0); },
           food: () => (ready() ? 'fish' : null), eaten: () => { st.regrow[s.id] = game.day + 0.1; w.vfx.play('splash', s.x, s.y + 2, { scale: 0.5 }); }, update: () => { fx?.setVisible(ready()); } });
         break;
       }
@@ -73,7 +73,7 @@ export function buildInteractables(ctx: InteractCtx, spawns: Spawn[]): Interacta
         const opened = st.taken.includes(s.id), g = img(opened ? 'chest_open' : 'chest', s.x, s.y);
         let open = opened;
         out.push({ kind: 'chest', id: s.id, x: s.x, y: s.y - 8, range: 24, prompt: () => (open ? null : 'Abrir baú'),
-          use: () => { if (open) return; open = true; st.taken.push(s.id); g.setFrame('chest_open'); game.addItem(s.loot, s.n); audio.play('chest'); w.vfx.play('collect', s.x, s.y, {}); events.emit('toast', { text: `+${s.n} ${ITEM_NAMES[s.loot]}`, icon: s.loot }); } });
+          use: () => { if (open) return; open = true; st.taken.push(s.id); g.setFrame('chest_open'); game.addItem(s.loot, s.n); audio.play('chest'); w.vfx.play('collect', s.x, s.y, {}); w.vfx.floatText(s.x, s.y - 24, `+${s.n} ${ITEM_NAMES[s.loot]}`, 0xf2c14e); } });
         break;
       }
       case 'sign': {

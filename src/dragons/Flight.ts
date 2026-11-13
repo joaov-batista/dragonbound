@@ -9,6 +9,7 @@ import { Liquid } from '../physics/TileGrid';
 import type { Player } from '../player/Player';
 import { approach, clamp } from '../utils/rng';
 import type { Dragon } from './Dragon';
+import { chargeOrb, melee, tickCombat } from './DragonCombat';
 
 /**
  * Mounted control. On the ground the dragon walks; a flap takes off. In the air the model is
@@ -17,7 +18,7 @@ import type { Dragon } from './Dragon';
  */
 export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: boolean): void {
   const b = d.body, f = d.flight, st = d.ph.stats, t = d.mind.traits, rec = d.rec, inp = input;
-  f.dashCd -= dt; f.breathCd -= dt; f.biteCd -= dt; f.dashT -= dt; f.ghostT -= dt;
+  f.dashCd -= dt; f.breathCd -= dt; f.biteCd -= dt; f.dashT -= dt; f.ghostT -= dt; tickCombat(d.combat, dt);
   // responsiveness: an untrained, independent dragon lags behind the reins
   const resp = clamp(4.5 + rec.training * 0.09 + st.agility * 3.5 - t.independence * 3 + (rec.trust - 85) * 0.08, 2.5, 16);
   const ix = inp.axisX, iy = inp.axisY * (inp.bindings.invertFlightY ? -1 : 1);
@@ -89,13 +90,9 @@ export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: b
     const climbing = f.sy < -0.15 && !tired, diving = f.sy > 0.3 && f.dashT <= 0, hovering = speed < 40;
     if (diving) { d.sprite.anims.pause(); if (d.sprite.frame.name !== 'fly_1') d.sprite.setFrame('fly_1'); }
     else { if (d.sprite.anims.isPaused) d.sprite.anims.resume(); d.sprite.anims.timeScale = f.flapKick > 0 ? 2 : climbing ? 1.6 : hovering ? 1.35 : tired ? 1.2 : 0.75; }
-    // attacks
-    if (inp.pressed('attack') && f.biteCd <= 0) { f.biteCd = 0.45; w.vfx.play('claw', b.x + d.facing * 20 * d.scale, b.y - 4, { flip: d.facing < 0, follow: b }); audio.play('slash'); w.strike({ x: d.facing > 0 ? b.x : b.x - 60, y: b.y - 44, w: 60, h: 52 }, 2, 'physical', true, b.x, 'dragon', d); }
-    if (inp.pressed('ability') && f.breathCd <= 0 && f.stamina > 8) {
-      f.breathCd = 0.7; f.stamina -= 8;
-      const ang = Math.atan2(b.vy * 0.4 + f.sy * 120, Math.abs(b.vx) + 200);
-      d.breathe(true, d.facing * Math.cos(ang) * 330 + b.vx * 0.5, Math.sin(ang) * 330);
-    }
+    // attacks: claw combo ending in a spinning wing slap; tap the ability for shots, hold it for a power orb
+    if (inp.pressed('attack')) melee(d);
+    chargeOrb(d, inp.down('ability'), dt, f.sy);
     // speed feedback
     const k = clamp(Math.hypot(b.vx, b.vy) / (maxV * 1.2), 0, 1);
     audio.setWindBoost(k);
@@ -113,13 +110,19 @@ export function updateRide(d: Dragon, pl: Player, w: World, dt: number, storm: b
       if (!water && f.skimT <= 0) { f.skimT = 0.5; audio.play('dash', 0.15 + f.skim * 0.2); }
     }
   }
-  if (!d.air) { f.speedK = 0; f.skim = 0; if (inp.pressed('ability') && f.breathCd <= 0) { f.breathCd = 1; d.setAnim('attack'); d.strike(true); } audio.setWindBoost(0); }
+  if (!d.air) {
+    f.speedK = 0; f.skim = 0; audio.setWindBoost(0);
+    // on the ground: claw combo ending in a tail slam; the same shots and power orbs
+    if (inp.pressed('attack')) { d.setAnim('attack'); melee(d); }
+    chargeOrb(d, inp.down('ability'), dt, f.sy);
+  }
   // rider + sprite
   d.finish(dt, null);
   // pitch follows the flight path (nose down in a dive, up in a climb), eased so it never snaps
   const target = d.air ? clamp(Math.atan2(b.vy, Math.max(70, Math.abs(b.vx))), -0.6, 0.6) * d.facing : 0;
   f.pitch += (target - f.pitch) * Math.min(1, dt * 7);
-  d.sprite.setRotation(f.pitch);
+  const spin = d.combat.spinT > 0 ? (1 - d.combat.spinT / 0.32) * Math.PI * 2 * d.facing : 0;
+  d.sprite.setRotation(f.pitch + spin);
   placeRider(d, pl, Math.abs(b.vx) > maxV * 0.6 || f.dashT > 0);
   rec.energy = clamp(rec.energy - dt / 900);
 }

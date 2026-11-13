@@ -6,7 +6,8 @@ import { events } from '../core/events';
 import { hud } from '../core/hud';
 import { settings } from '../core/settings';
 import { FOOD_ITEMS, ITEM_NAMES, game } from '../core/state';
-import type { ProjectileSpec, World } from '../core/world';
+import type { ProjectileSpec, World, StrikeOpts } from '../core/world';
+import { cancelCharge } from '../dragons/DragonCombat';
 import { Dragon } from '../dragons/Dragon';
 import { ceilingY, updateRide } from '../dragons/Flight';
 import type { Element, FoodId } from '../dragons/genetics/types';
@@ -285,7 +286,6 @@ export class IslandScene extends Phaser.Scene {
     from.cam.removeBounds();
     to.vfx.puff(mover.x, mover.y - 12, 0xffffff, 8, { speed: 50, gravity: 0, spread: 180, life: 350 });
     audio.play('dash', 0.6); audio.play('flap', 0.5);
-    events.emit('toast', { text: `Camada: ${LANE_NAMES[to.depth]}`, icon: dir < 0 ? 'star' : 'wing' });
   }
 
   /** Side-profile minimap of the island (terrain, water, docks, campfires), painted once per visit. */
@@ -328,7 +328,9 @@ export class IslandScene extends Phaser.Scene {
     return {
       scene: self as Phaser.Scene, get grid() { return lane.data.grid; }, get island() { return lane.data; }, get vfx() { return lane.vfx; },
       hitstop: (s) => self.hitstop(s), shake: (i, ms) => self.shake(i, ms), spawnProjectile: (p) => lane.shots.spawn(p),
-      strike: (r, d, e, f, x, s, ex) => self.strikeIn(lane, r, d, e, f, x, s, ex), windAt: (x, y) => self.windIn(lane, x, y),
+      strike: (r, d, e, f, x, s, ex, o) => self.strikeIn(lane, r, d, e, f, x, s, ex, o), windAt: (x, y) => self.windIn(lane, x, y),
+      foes: () => lane.enemies.filter((e) => e.alive),
+      flash: (ms, c) => { if (settings.screenShake > 0) self.overlayCam.flash(ms, (c >> 16) & 255, (c >> 8) & 255, c & 255, false); },
     };
   }
   private get worldRef(): World { return this.lane.world; }
@@ -351,19 +353,23 @@ export class IslandScene extends Phaser.Scene {
     return { x: wx, y: wy };
   }
 
-  strike(rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown): number {
-    return this.strikeIn(this.lane, rect, dmg, element, friendly, fromX, source, exclude);
+  strike(rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown, opts?: StrikeOpts): number {
+    return this.strikeIn(this.lane, rect, dmg, element, friendly, fromX, source, exclude, opts);
   }
   /** Damage resolution is per lane: nothing reaches across depth. */
-  private strikeIn(L: Lane, rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown): number {
+  private strikeIn(L: Lane, rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown, opts?: StrikeOpts): number {
     let n = 0;
     const hits = (b: { x: number; y: number; w: number; h: number }): boolean => rectsOverlap(rect, { x: b.x - b.w / 2, y: b.y - b.h, w: b.w, h: b.h });
     if (friendly) {
       for (const e of L.enemies) if (e.alive && hits(e.body)) {
         let d = dmg;
         const mark = this.comboMark.get(e) ?? -9;
-        if (source === 'player' && this.time.now - mark < 1400) { d *= 2; L.vfx.play('crit', e.body.x, e.body.y, { scale: 0.8 }); events.emit('toast', { text: 'Ataque combinado!', icon: 'star' }); this.comboMark.delete(e); }
-        if (e.hurt(d, fromX, element, source, source === 'player' ? this.player.attackId : undefined)) { n++; if (source === 'dragon') this.comboMark.set(e, this.time.now); if (!e.alive) this.onEnemyDead(e); }
+        if (source === 'player' && this.time.now - mark < 1400) { d *= 2; L.vfx.play('crit', e.body.x, e.body.y, { scale: 0.8 }); this.comboMark.delete(e); }
+        if (e.hurt(d, fromX, element, source, source === 'player' ? this.player.attackId : undefined)) {
+          n++; if (source === 'dragon') this.comboMark.set(e, this.time.now);
+          if (opts && e.alive && e.kind !== 'anchor' && e.kind !== 'alpha') { const dir = Math.sign(e.body.x - fromX || 1); if (opts.knock) e.body.vx = dir * 130 * opts.knock; if (opts.launch) e.body.vy = -opts.launch; }
+          if (!e.alive) this.onEnemyDead(e);
+        }
       }
       if (source === 'player') for (const d of L.dragons) if (d !== exclude && d.ready && !d.ridden && !d.far && (!d.rec.bonded || d.rec.trapped) && hits(d.body)) {
         if (this.hitOnce(d)) { d.hurt(dmg, fromX, element, 'player'); n++; }
@@ -387,8 +393,9 @@ export class IslandScene extends Phaser.Scene {
   }
   private onEnemyDead(e: EnemyLike): void {
     if (e.kind === 'bruto' || e.kind === 'anchor' || e.kind === 'alpha') return;
-    if (e.drop === 'coin') { const n = 3 + Math.floor(Math.random() * 4); game.addItem('coin', n); events.emit('toast', { text: `+${n} moedas`, icon: 'coin' }); }
-    else if (e.drop && Math.random() < 0.7) { game.addItem(e.drop); events.emit('toast', { text: `+1 ${ITEM_NAMES[e.drop]}`, icon: e.drop }); }
+    // loot pops as floating text where the foe fell, not as a notice
+    if (e.drop === 'coin') { const n = 3 + Math.floor(Math.random() * 4); game.addItem('coin', n); this.lane.vfx.floatText(e.body.x, e.body.y - 30, `+${n} moedas`, 0xf2c14e); }
+    else if (e.drop && Math.random() < 0.7) { game.addItem(e.drop); this.lane.vfx.floatText(e.body.x, e.body.y - 30, `+1 ${ITEM_NAMES[e.drop]}`, 0xd8f0c0); }
     this.hitstop(0.07);
   }
 
@@ -401,7 +408,7 @@ export class IslandScene extends Phaser.Scene {
   }
   private doDismount(): void {
     const d = this.mount; if (!d) return;
-    this.mount = null; d.ridden = false; d.sprite.setRotation(0);
+    this.mount = null; d.ridden = false; d.sprite.setRotation(0); cancelCharge(d);
     this.player.sprite.setDepth(DEPTH.player).setVisible(true);
     this.player.dismount(d.body.x - d.facing * 4, d.body.y - (d.air ? 30 : 2), d.air ? -210 : -120);
     if (!d.rec.kept) { d.rec.follow = true; d.mind.force('follow', 0.5); }
