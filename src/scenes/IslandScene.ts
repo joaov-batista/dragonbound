@@ -465,7 +465,9 @@ export class IslandScene extends Phaser.Scene {
     if ((this.promptT -= dt) > 0 && !input.pressed('interact')) return;
     this.promptT = 0.1;
     let text: string | null = null, action = 'interact';
-    const f = this.focus, fdist = f ? Math.hypot(f.body.x - pb.x, f.body.y - pb.y) : 999;
+    // a dragon performing the bonding ritual takes priority over whichever dragon happens to be nearest
+    const bonding = this.dragons.find((d) => d.intent?.state === 'bonding' && Math.hypot(d.body.x - pb.x, d.body.y - pb.y) < 90);
+    const f = bonding ?? this.focus, fdist = f ? Math.hypot(f.body.x - pb.x, f.body.y - pb.y) : 999;
     if (this.mount) { text = this.mount.air ? null : 'Desmontar'; action = 'mount'; if (!this.mount.air && this.mount.body.onGround && Math.abs(this.mount.body.vx) < 20) text = 'Desmontar  ·  Pular para decolar'; }
     else if (f && f.intent?.state === 'bonding') text = 'Fique imóvel e segure para criar o vínculo';
     else if (best) text = best.prompt();
