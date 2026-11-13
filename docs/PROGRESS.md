@@ -32,6 +32,12 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
 | Áudio sintetizado (SFX, vozes, ambiente, música generativa) com 5 volumes | implementado | **não verificado por ouvido** (headless não tem áudio) |
 | Ovos e filhotes (ninho → ovo → eclosão) | implementado | lógica em unit; fluxo no jogo não exercitado no e2e |
 
+## Deploy
+- Produção: https://dragonbound-bice.vercel.app (projeto Vercel `dragonbound`, equipe joaov-batistas-projects).
+- O app GitHub da Vercel ainda **não tem acesso** a este repositório, então pushes não disparam build sozinhos.
+  O deploy atual foi feito enviando `dist/` pela API da Vercel. Para ativar deploy automático: Vercel → Settings → Git
+  (ou GitHub → Settings → Applications → Vercel → incluir `dragonbound`). O `vercel.json` já configura o build.
+
 ## Resultados de teste (sessão 1)
 - `npm test`: 34/34.
 - `npm run e2e`: 39/39. Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
