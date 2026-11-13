@@ -71,6 +71,20 @@ async function main() {
   check('parry stance opens a parry window', await S(() => window.__scene.player.state === 'parry' && window.__scene.player.parryWindow > 0));
   await sleep(600);
 
+  // depth lanes: step into the background and back (retry a little further on if rock blocks the spot)
+  const laneOf = () => S(() => window.__scene.lane.depth);
+  let laneOk = false;
+  for (let i = 0; i < 8 && !laneOk; i++) { await page.keyboard.press('KeyQ'); await sleep(500); laneOk = (await laneOf()) === -1; if (!laneOk) { await page.keyboard.down('KeyD'); await sleep(350); await page.keyboard.up('KeyD'); } }
+  const backDragons = await S(() => window.__scene.lane.dragons.map((d) => d.rec.genes.species));
+  check('Q steps into the background lane, which has its own dragons', laneOk && backDragons.length > 0, backDragons.join(','));
+  await page.keyboard.down('KeyD'); await sleep(700); await page.keyboard.up('KeyD');
+  const bx = await S(() => window.__scene.player.body.onGround);
+  check('the background lane is walkable', bx);
+  await page.screenshot({ path: join(SHOTS, '03b-lane-back.png') });
+  for (let i = 0; i < 8 && (await laneOf()) !== 0; i++) { await page.keyboard.press('KeyZ'); await sleep(500); if ((await laneOf()) !== 0) { await page.keyboard.down('KeyD'); await sleep(350); await page.keyboard.up('KeyD'); } }
+  check('Z returns to the main lane', (await laneOf()) === 0);
+  await sleep(500);
+
   // ── dragons: unique DNA, behaviour, taming ───────────────────────────
   const dna = await S(() => { const s = window.__scene; return s.dragons.map((d) => ({ id: d.rec.genes.id, sp: d.rec.genes.species, name: d.rec.name, c: d.ph.primary, head: d.ph.head, wings: d.ph.wings })); });
   check('island has wild dragons with distinct identities', dna.length >= 6 && new Set(dna.map((d) => d.id)).size === dna.length, `${dna.length} dragões`);

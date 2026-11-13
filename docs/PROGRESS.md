@@ -11,6 +11,14 @@
 - **Voo lateral refeito** (`Flight.updateRide`): direcional solto = mantém altitude e paira; direção = cruzeiro; cima = sobe (fôlego); baixo = mergulho que vira velocidade; inverter a direção freia até zero antes de virar. Batida de asa acompanha o esforço (rápida ao subir/pairar, lenta planando, recolhida no mergulho), inclinação segue a trajetória. **Teto suave relativo ao relevo** (`ceilingY(w, x)`: ~10 tiles acima do chão mais alto num raio de 18 tiles) para o chão nunca sumir da tela. Nuvens no céu da ilha (algumas na frente) e rastros de vento dão sensação de velocidade.
 - **Voo no mar**: sprite de cima maior (células 80 px), 6 quadros de batida + quadro de asas recolhidas; inclinação nas curvas; altitude com sombra que se afasta/aproxima; dash vira rasante com respingos e esteira; nuvens altas com parallax passando por cima do dragão; rastros na direção do voo.
 
+## Camadas de profundidade (sessão 2)
+- Cada ilha tem 3 camadas no mesmo lugar: **Fundo** (-1), **Trilha** (0, a ilha autoral) e **Frente** (+1). Fundo e Frente são gerados de forma determinística a partir do relevo da Trilha (`src/world/islands/lanes.ts`): mesma costa e nível do mar, relevo próprio (planaltos/caverna e ruínas no fundo; praia, brejo com poças e plataformas na frente), recursos, baú, relíquia, fogueira, inimigos e **habitats de outras espécies**.
+- Navegação: **Q** (fundo) / **Z** (frente), analógico direito no controle, dois botões no toque. Funciona a pé e montado; o dragão montado e o companheiro que segue vão junto. Se a outra camada tiver rocha no ponto, a troca é bloqueada (procura até 4 tiles acima).
+- Render: uma câmera por camada (+ céu atrás e sobreposição à frente). Cada objeto pertence a uma câmera via `cameraFilter` (`IslandScene.tagTo`; novos objetos herdam a camada em `tagCam`). Profundidade relativa `d` → zoom `1.6^d`, deslocamento vertical, névoa e `ColorMatrix` por câmera (fundo dessaturado, frente em silhueta escura). Transição animada.
+- Simulação: os dragões das outras camadas continuam vivos (andam, dormem, comem), mas não percebem o jogador; inimigos fora da camada ativa ficam parados. Dano nunca atravessa camadas.
+- Save: `player.lane`, `checkpoint.lane`, `DragonRecord.lane` (opcionais; ausente = 0). HUD: indicador de camada sob o minimapa; minimapa por camada.
+- Custo: 5 câmeras e 2 filtros ativos. ~54 fps no Chromium headless com GL por software; **não medido em celular**.
+
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
 
@@ -49,7 +57,7 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
 
 ## Resultados de teste (sessão 1)
 - `npm test`: 34/34.
-- `npm run e2e`: 40/40 (sessão 2: inclui "mantém altitude com o direcional solto"). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
+- `npm run e2e`: 43/43 (sessão 2: inclui altitude em voo e troca de camadas). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
 - Desempenho: ~57 fps no Chromium headless com GL por software, 7 entidades. **Isso não representa aparelhos reais**; nenhum dispositivo físico foi medido.
 
 ## Problemas conhecidos

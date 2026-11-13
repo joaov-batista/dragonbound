@@ -23,18 +23,38 @@ import { siteById } from '../world/generation/archipelago';
 import { loadIsland } from '../world/generation/archipelago';
 import { IslandView } from '../world/IslandView';
 import type { IslandData } from '../world/islands/types';
+import { LANE_NAMES, laneList } from '../world/islands/lanes';
 import { WeatherFx } from '../world/WeatherFx';
 import { mix } from '../art/Pix';
 import { THEMES } from '../art/themes';
 
 export interface IslandEntry { islandId: string; entry: 'load' | 'dock' | 'air-west' | 'air-east' | 'respawn' }
 
-/** Side-view exploration: platforming, combat, taming and mounted flight on one island. */
+/**
+ * One depth lane of the island: its own terrain, entities and camera. All lanes share world coordinates
+ * (same geography); each is drawn by its own camera whose zoom encodes depth relative to the active lane.
+ */
+interface Lane {
+  depth: number; data: IslandData; world: World; view: IslandView; vfx: VfxManager; shots: Projectiles;
+  dragons: Dragon[]; enemies: Enemy[]; things: Interactable[];
+  cam: Phaser.Cameras.Scene2D.Camera; haze: Phaser.GameObjects.Rectangle; cm: Phaser.Filters.ColorMatrix;
+}
+
+/** Side-view exploration: platforming, combat, taming and mounted flight on one island, across depth lanes. */
 export class IslandScene extends Phaser.Scene {
-  grid!: TileGrid; island!: IslandData; vfx!: VfxManager;
-  player!: Player; dragons: Dragon[] = []; enemies: Enemy[] = []; things: Interactable[] = [];
-  private view!: IslandView; private backdrop!: Backdrop; private weather!: WeatherFx; private shots!: Projectiles;
+  island!: IslandData; player!: Player;
+  lanes: Lane[] = []; lane!: Lane;
+  get grid(): TileGrid { return this.lane.data.grid; }
+  get vfx(): VfxManager { return this.lane.vfx; }
+  get dragons(): Dragon[] { return this.lane.dragons; }
+  get enemies(): Enemy[] { return this.lane.enemies; }
+  set enemies(v: Enemy[]) { this.lane.enemies = v; }
+  get things(): Interactable[] { return this.lane.things; }
+  private get shots(): Projectiles { return this.lane.shots; }
+  private backdrop!: Backdrop; private weather!: WeatherFx;
   private tintRect!: Phaser.GameObjects.Rectangle;
+  private skyCam!: Phaser.Cameras.Scene2D.Camera; private overlayCam!: Phaser.Cameras.Scene2D.Camera;
+  private camAll = 0; private tagCam: Phaser.Cameras.Scene2D.Camera | null = null; private laneT = 0; private laneCheckT = 0;
   private entry!: IslandEntry; private stop = 0; private mount: Dragon | null = null; private focus: Dragon | null = null;
   private buildQueue: Dragon[] = []; private promptT = 0; private saveT = 45; private hatchT = 2; private foodT = 0; private leaving = false;
   private foodCache = new Map<Dragon, { x: number; y: number; thing: Interactable } | null>();
@@ -45,67 +65,171 @@ export class IslandScene extends Phaser.Scene {
 
   create(): void {
     const site = siteById(game.save.worldSeed, this.entry.islandId) ?? siteById(game.save.worldSeed, 'alvamar')!;
-    this.island = loadIsland(site); this.grid = this.island.grid;
+    this.island = loadIsland(site);
     game.populate(this.island);
     game.save.player.island = this.island.id;
     if (!game.save.ocean.discovered.includes(this.island.id)) game.save.ocean.discovered.push(this.island.id);
-    this.dragons = []; this.enemies = []; this.things = []; this.buildQueue = []; this.mount = null; this.focus = null; this.leaving = false; this.foodCache.clear(); this.comboMark.clear();
+    this.lanes = []; this.mount = null; this.focus = null; this.leaving = false; this.foodCache.clear(); this.comboMark.clear(); this.buildQueue = [];
 
-    const W = this.worldRef;
-    this.vfx = new VfxManager(this);
+    // ── cameras: sky (backdrop) → one per lane, back to front → overlay (tint, weather, fades) ──
+    const W0 = this.scale.width, H0 = this.scale.height;
+    this.skyCam = this.cameras.main;
+    const laneDefs = laneList(this.island);
+    const laneCams = laneDefs.map((l) => this.cameras.add(0, 0, W0, H0, false, 'lane' + l.depth).setRoundPixels(true));
+    this.overlayCam = this.cameras.add(0, 0, W0, H0, false, 'overlay');
+    this.cameras.main = this.overlayCam; // fades / flashes cover every lane
+    this.camAll = 0; for (const c of this.cameras.cameras) this.camAll |= c.id;
+    this.events.on(Phaser.Scenes.Events.ADDED_TO_SCENE, (go: Phaser.GameObjects.GameObject) => { if (this.tagCam) this.tagTo(go, this.tagCam); });
+
+    this.tagCam = this.skyCam;
     this.backdrop = new Backdrop(this, this.island.biome, this.island.seaRow * TILE);
-    this.view = new IslandView(this, this.island);
-    this.view.addSkyClouds(this.island, (x) => ceilingY(this.worldRef, x));
+
+    laneDefs.forEach(({ depth, data }, i) => {
+      const cam = laneCams[i];
+      this.tagCam = cam;
+      const lane = { depth, data, cam, dragons: [], enemies: [], things: [] } as unknown as Lane;
+      lane.world = this.makeWorld(lane);
+      lane.cm = cam.filters.internal.addColorMatrix(); // per-lane grade: desaturated distance, dark foreground silhouette
+      lane.vfx = new VfxManager(this, (o) => this.tagTo(o, cam));
+      lane.view = new IslandView(this, data);
+      if (depth === 0) lane.view.addSkyClouds(data, (x) => ceilingY(lane.world, x));
+      lane.shots = new Projectiles(lane.world);
+      lane.haze = this.add.rectangle(-W0 * 3, -H0 * 3, W0 * 7, H0 * 7, 0xc8dcf0, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint - 1);
+      lane.things = buildInteractables({ world: lane.world, view: lane.view, sail: () => this.sail(), rest: (x, y) => this.rest(x, y), nest: (x, y) => this.useNest(x, y) }, data.spawns);
+      for (const s of data.spawns) if (s.t === 'enemy') lane.enemies.push(new Enemy(lane.world, s.kind, s.x, s.y));
+      this.lanes.push(lane);
+    });
+    const byDepth = (d: number | undefined): Lane => this.lanes.find((l) => l.depth === (d ?? 0)) ?? this.lanes.find((l) => l.depth === 0)!;
+
+    this.tagCam = this.overlayCam;
     this.weather = new WeatherFx(this, this.island.weather, this.island.biome);
-    this.shots = new Projectiles(W);
     this.tintRect = this.add.rectangle(0, 0, 10, 10, 0xffffff).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint).setBlendMode(Phaser.BlendModes.MULTIPLY);
 
     // where does the player arrive?
     const p = game.save.player, dock = this.island.spawns.find((s) => s.t === 'dock');
-    let px = this.island.start.x, py = this.island.start.y;
-    if (this.entry.entry === 'load' && p.x >= 0) { px = p.x; py = p.y; }
-    else if (this.entry.entry === 'respawn' && p.checkpoint.island === this.island.id && p.checkpoint.x >= 0) { px = p.checkpoint.x; py = p.checkpoint.y; }
+    let px = this.island.start.x, py = this.island.start.y, lane = byDepth(0);
+    if (this.entry.entry === 'load' && p.x >= 0) { px = p.x; py = p.y; lane = byDepth(p.lane); }
+    else if (this.entry.entry === 'respawn' && p.checkpoint.island === this.island.id && p.checkpoint.x >= 0) { px = p.checkpoint.x; py = p.checkpoint.y; lane = byDepth(p.checkpoint.lane); }
     else if (this.entry.entry === 'dock' && dock) { px = dock.x; py = dock.y; }
     else if (this.entry.entry === 'air-west') { px = 150; py = (this.island.seaRow - 13) * TILE; }
-    else if (this.entry.entry === 'air-east') { px = this.grid.pxW - 150; py = (this.island.seaRow - 13) * TILE; }
-    if (p.checkpoint.x < 0) p.checkpoint = { island: this.island.id, x: px, y: py };
-    this.player = new Player(W, px, py);
-
-    this.things = buildInteractables({ world: W, view: this.view, sail: () => this.sail(), rest: (x, y) => this.rest(x, y), nest: (x, y) => this.useNest(x, y) }, this.island.spawns);
-    for (const s of this.island.spawns) if (s.t === 'enemy') this.enemies.push(new Enemy(W, s.kind, s.x, s.y));
+    else if (this.entry.entry === 'air-east') { px = this.island.grid.pxW - 150; py = (this.island.seaRow - 13) * TILE; }
+    if (p.checkpoint.x < 0) p.checkpoint = { island: this.island.id, x: px, y: py, lane: 0 };
+    this.lane = lane; this.laneT = lane.depth; p.lane = lane.depth;
+    this.tagCam = lane.cam;
+    this.player = new Player(lane.world, px, py);
 
     // companion travels with the player; everyone else lives where they were left
     const comp = game.companion;
     if (comp && comp.island !== this.island.id) { comp.island = this.island.id; comp.homeX = px; comp.homeY = py; }
-    if (comp && (this.entry.entry !== 'load')) { comp.x = px - 30; comp.y = py; }
-    for (const rec of game.dragonsOn(this.island.id)) this.addDragon(rec);
+    if (comp && (this.entry.entry !== 'load')) { comp.x = px - 30; comp.y = py; comp.lane = lane.depth; }
+    for (const rec of game.dragonsOn(this.island.id)) this.addDragon(rec, byDepth(rec.lane));
+    this.tagCam = byDepth(0).cam;
     for (const e of game.save.eggs) if (e.island === this.island.id) this.add.image(e.x, e.y - 2, 'props', 'egg').setOrigin(0.5, 1).setDepth(DEPTH.entities).setName('egg-' + e.id);
+    this.tagCam = lane.cam;
 
-    const cam = this.cameras.main;
-    cam.setBounds(0, -400, this.grid.pxW, this.grid.pxH + 400).setRoundPixels(true);
-    cam.centerOn(px, py - 40); this.camY = py - 40;
-    cam.fadeIn(500, 8, 6, 16);
+    lane.cam.setBounds(0, -400, this.grid.pxW, this.grid.pxH + 400);
+    lane.cam.centerOn(px, py - 40); this.camY = py - 40;
+    this.syncLaneCams(0);
+    this.overlayCam.fadeIn(500, 8, 6, 16);
 
     if (this.entry.entry.startsWith('air') && comp) {
       const d = this.dragons.find((x) => x.rec === comp);
       if (d) { d.build(); d.body.x = px; d.body.y = py; d.facing = this.entry.entry === 'air-west' ? 1 : -1; d.body.vx = d.facing * 120; this.doMount(d, true); d.air = true; d.flight.airborne = true; }
     }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { hud.minimap = null; this.shots.clear(); DragonTextures.dispose(this); input.clearVirtual(); });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      hud.minimap = null; hud.lanes = null; this.tagCam = null; this.events.off(Phaser.Scenes.Events.ADDED_TO_SCENE);
+      for (const l of this.lanes) l.shots.clear();
+      DragonTextures.dispose(this); input.clearVirtual();
+      for (const k of ['water-surface', 'lava-surface']) if (this.textures.exists(k)) this.textures.remove(k);
+    });
     events.emit('areaTitle', { title: this.island.name, subtitle: this.island.subtitle });
     hud.mode = this.mount ? 'flight' : 'ground'; hud.prompt = null; hud.dialog = null;
-    this.paintMinimap();
+    this.paintMinimaps();
     this.applyAmbience(0);
     if (DEBUG) (window as unknown as Record<string, unknown>).__scene = this;
+  }
+
+  /** Render `go` with one camera only (all other cameras of this scene ignore it). */
+  private tagTo(go: Phaser.GameObjects.GameObject, cam: Phaser.Cameras.Scene2D.Camera): void { (go as unknown as { cameraFilter: number }).cameraFilter = this.camAll & ~cam.id; }
+
+  /** Zoom, fade and haze every lane camera by its depth relative to the (animated) active depth. */
+  private syncLaneCams(dt: number): void {
+    const target = this.lane.depth;
+    this.laneT += (target - this.laneT) * Math.min(1, dt * 6);
+    if (Math.abs(target - this.laneT) < 0.002) this.laneT = target;
+    const act = this.lane.cam, sx = act.scrollX, sy = act.scrollY;
+    for (const l of this.lanes) {
+      const d = l.depth - this.laneT, z = Math.pow(1.6, d), ad = Math.abs(d);
+      l.cam.setZoom(z);
+      if (l !== this.lane) {
+        // distant lanes sit a little higher on screen (their relief peeks over ours), near ones hug the bottom edge
+        const lift = d < 0 ? 26 * -d : -34 * d;
+        l.cam.scrollX = sx; l.cam.scrollY = sy + lift / z;
+      }
+      const alpha = d > 1 ? Math.max(0, 2 - d) : 1;
+      l.cam.setAlpha(alpha).setVisible(alpha > 0.02);
+      l.haze.setFillStyle(this.hazeColor, d < 0 ? Math.min(0.32, ad * 0.14) : 0);
+      l.cm.active = ad > 0.01;
+      if (l.cm.active) {
+        const m = l.cm.colorMatrix.reset();
+        if (d < 0) m.saturate(-Math.min(0.55, ad * 0.3), true).brightness(1 + Math.min(0.06, ad * 0.03), true);
+        else m.saturate(-Math.min(0.7, ad * 0.45), true).brightness(Math.max(0.28, 1 - ad * 0.62), true);
+      }
+    }
+  }
+  private hazeColor = 0xc8dcf0;
+
+  /** Is there room for `b` in lane `l` at its x? Searches a few tiles up (and down while airborne). */
+  private freeSpot(l: Lane, b: { x: number; y: number; w: number; h: number }, airborne: boolean): number | null {
+    const g = l.data.grid, fits = (y: number): boolean => {
+      for (let yy = y - b.h + 1; yy <= y - 1; yy += 8) for (const xx of [b.x - b.w / 2 + 1, b.x, b.x + b.w / 2 - 1]) if (g.solidPx(xx, yy)) return false;
+      return !g.solidPx(b.x, y - 1) && g.liquidAt(b.x, y - 4) !== Liquid.Lava;
+    };
+    for (let k = 0; k <= 4; k++) { if (fits(b.y - k * TILE)) return b.y - k * TILE; if (airborne && k > 0 && fits(b.y + k * TILE)) return b.y + k * TILE; }
+    return null;
+  }
+
+  /** Step into the lane behind (-1) or in front (+1), taking the mount and a following companion along. */
+  private switchLane(dir: -1 | 1): void {
+    const i = this.lanes.indexOf(this.lane), to = this.lanes[i + dir], from = this.lane;
+    if (!to) { events.emit('toast', { text: dir < 0 ? 'Não há nada mais ao fundo daqui.' : 'Não há camada mais à frente.' }); audio.play('deny'); return; }
+    const pl = this.player, mover = this.mount ? this.mount.body : pl.body;
+    const y = this.freeSpot(to, mover, !!this.mount?.air || !mover.onGround);
+    if (y === null) { events.emit('toast', { text: `Caminho bloqueado: a camada ${LANE_NAMES[to.depth]} tem rocha neste ponto.` }); audio.play('deny'); this.shake(1); return; }
+    from.vfx.puff(mover.x, mover.y - 12, 0xffffff, 6, { speed: 40, gravity: 0, spread: 180, life: 300 });
+    const moveDragon = (d: Dragon): void => {
+      from.dragons.splice(from.dragons.indexOf(d), 1); to.dragons.push(d); d.world = to.world; d.rec.lane = to.depth;
+      for (const o of d.objects()) this.tagTo(o, to.cam);
+    };
+    mover.y = y;
+    if (this.mount) { moveDragon(this.mount); }
+    pl.world = to.world; this.tagTo(pl.sprite, to.cam);
+    if (!this.mount && mover.onGround) mover.vy = -90;
+    // a following companion comes along if it is close
+    const comp = from.dragons.find((d) => d.rec === game.companion && !d.ridden && d.rec.follow);
+    if (comp && Math.hypot(comp.body.x - mover.x, comp.body.y - mover.y) < 260) {
+      const cy = this.freeSpot(to, { x: mover.x - pl.facing * 30, y: mover.y, w: comp.body.w, h: comp.body.h }, true);
+      moveDragon(comp); comp.body.x = mover.x - pl.facing * 30; comp.body.y = cy ?? mover.y - 40; comp.air = cy === null || comp.air;
+    }
+    this.lane = to; game.save.player.lane = to.depth; this.focus = null; hud.focusId = null; this.tagCam = to.cam;
+    to.cam.setBounds(0, -400, to.data.grid.pxW, to.data.grid.pxH + 400);
+    to.cam.scrollX = from.cam.scrollX; to.cam.scrollY = from.cam.scrollY;
+    from.cam.removeBounds();
+    to.vfx.puff(mover.x, mover.y - 12, 0xffffff, 8, { speed: 50, gravity: 0, spread: 180, life: 350 });
+    audio.play('dash', 0.6); audio.play('flap', 0.5);
+    events.emit('toast', { text: `Camada: ${LANE_NAMES[to.depth]}`, icon: dir < 0 ? 'star' : 'wing' });
   }
 
   /** Side-profile minimap of the island (terrain, water, docks, campfires), painted once per visit. */
   static readonly MM_W = 96; static readonly MM_H = 40; static readonly MM_ROWS = 52;
   private mmTop = 0;
-  private paintMinimap(): void {
-    const g = this.grid, W = IslandScene.MM_W, H = IslandScene.MM_H, th = THEMES[this.island.biome];
-    if (this.textures.exists('mm-island')) this.textures.remove('mm-island');
-    const tex = this.textures.createCanvas('mm-island', W, H)!, c = tex.context, img = c.createImageData(W, H);
+  /** One minimap texture per lane, painted once when the scene starts (never replaced while shown). */
+  private paintMinimaps(): void { for (const l of this.lanes) this.paintMinimap(l); }
+  private paintMinimap(lane: Lane): void {
+    const g = lane.data.grid, W = IslandScene.MM_W, H = IslandScene.MM_H, th = THEMES[this.island.biome], key = 'mm-island' + lane.depth;
+    if (this.textures.exists(key)) this.textures.remove(key);
+    const tex = this.textures.createCanvas(key, W, H)!, c = tex.context, img = c.createImageData(W, H);
     this.mmTop = this.island.seaRow - (IslandScene.MM_ROWS - 6);
     const put = (x: number, y: number, col: number, a = 255): void => { const i = (y * W + x) * 4; img.data[i] = (col >> 16) & 255; img.data[i + 1] = (col >> 8) & 255; img.data[i + 2] = col & 255; img.data[i + 3] = a; };
     for (let mx = 0; mx < W; mx++) {
@@ -120,7 +244,7 @@ export class IslandScene extends Phaser.Scene {
       }
     }
     c.putImageData(img, 0, 0);
-    for (const sp of this.island.spawns) if (sp.t === 'dock' || sp.t === 'campfire') {
+    for (const sp of lane.data.spawns) if (sp.t === 'dock' || sp.t === 'campfire') {
       const x = Math.round((sp.x / g.pxW) * W), y = Math.round(((sp.y / TILE - this.mmTop) / IslandScene.MM_ROWS) * H);
       c.fillStyle = sp.t === 'dock' ? '#f4f0e6' : '#ffa040'; c.fillRect(x - 1, y - 2, 2, 2);
     }
@@ -128,53 +252,59 @@ export class IslandScene extends Phaser.Scene {
   }
   private feedMinimap(): void {
     const b = this.mount ? this.mount.body : this.player.body;
-    hud.minimap = { kind: 'island', fx: b.x / this.grid.pxW, fy: (b.y / TILE - this.mmTop) / IslandScene.MM_ROWS, flying: !!this.mount?.air, facing: this.mount ? this.mount.facing : this.player.facing };
+    hud.minimap = { kind: 'island', tex: 'mm-island' + this.lane.depth, fx: b.x / this.grid.pxW, fy: (b.y / TILE - this.mmTop) / IslandScene.MM_ROWS, flying: !!this.mount?.air, facing: this.mount ? this.mount.facing : this.player.facing };
   }
 
-  /** `World.scene` for entities (Phaser reserves `this.scene` for the scene plugin). */
-  private wref: World | null = null;
-  private get worldRef(): World {
-    if (this.wref) return this.wref;
+  /** The `World` facade each entity talks to — bound to its own lane. */
+  private makeWorld(lane: Lane): World {
     const self = this;
-    return this.wref = {
-      scene: self as Phaser.Scene, get grid() { return self.grid; }, get island() { return self.island; }, get vfx() { return self.vfx; },
-      hitstop: (s) => self.hitstop(s), shake: (i, ms) => self.shake(i, ms), spawnProjectile: (p) => self.spawnProjectile(p),
-      strike: (r, d, e, f, x, s, ex) => self.strike(r, d, e, f, x, s, ex), windAt: (x, y) => self.windAt(x, y),
+    return {
+      scene: self as Phaser.Scene, get grid() { return lane.data.grid; }, get island() { return lane.data; }, get vfx() { return lane.vfx; },
+      hitstop: (s) => self.hitstop(s), shake: (i, ms) => self.shake(i, ms), spawnProjectile: (p) => lane.shots.spawn(p),
+      strike: (r, d, e, f, x, s, ex) => self.strikeIn(lane, r, d, e, f, x, s, ex), windAt: (x, y) => self.windIn(lane, x, y),
     };
   }
+  private get worldRef(): World { return this.lane.world; }
 
-  private addDragon(rec: (typeof game.save.dragons)[string]): Dragon {
-    const d = new Dragon(this.worldRef, rec);
-    this.dragons.push(d); this.buildQueue.push(d);
+  private addDragon(rec: (typeof game.save.dragons)[string], lane: Lane = this.lanes.find((l) => l.depth === (rec.lane ?? 0)) ?? this.lane): Dragon {
+    const prev = this.tagCam; this.tagCam = lane.cam;
+    const d = new Dragon(lane.world, rec);
+    this.tagCam = prev;
+    lane.dragons.push(d); this.buildQueue.push(d);
     return d;
   }
 
   hitstop(s: number): void { this.stop = Math.max(this.stop, s); }
-  shake(i: number, ms = 120): void { if (settings.screenShake > 0) this.cameras.main.shake(ms, 0.0025 * i * settings.screenShake); }
+  shake(i: number, ms = 120): void { if (settings.screenShake > 0) for (const l of this.lanes) l.cam.shake(ms, 0.0025 * i * settings.screenShake); }
   spawnProjectile(p: ProjectileSpec): void { this.shots.spawn(p); }
-  windAt(x: number, y: number): { x: number; y: number } {
+  windAt(x: number, y: number): { x: number; y: number } { return this.windIn(this.lane, x, y); }
+  private windIn(lane: Lane, x: number, y: number): { x: number; y: number } {
     let wx = 0, wy = 0;
-    for (const z of this.island.winds) if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) { wx += z.vx; wy += z.vy; }
+    for (const z of lane.data.winds) if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) { wx += z.vx; wy += z.vy; }
     return { x: wx, y: wy };
   }
 
   strike(rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown): number {
+    return this.strikeIn(this.lane, rect, dmg, element, friendly, fromX, source, exclude);
+  }
+  /** Damage resolution is per lane: nothing reaches across depth. */
+  private strikeIn(L: Lane, rect: Rect, dmg: number, element: Element | 'physical', friendly: boolean, fromX: number, source: 'player' | 'dragon' | 'enemy', exclude?: unknown): number {
     let n = 0;
     const hits = (b: { x: number; y: number; w: number; h: number }): boolean => rectsOverlap(rect, { x: b.x - b.w / 2, y: b.y - b.h, w: b.w, h: b.h });
     if (friendly) {
-      for (const e of this.enemies) if (e.alive && hits(e.body)) {
+      for (const e of L.enemies) if (e.alive && hits(e.body)) {
         let d = dmg;
         const mark = this.comboMark.get(e) ?? -9;
-        if (source === 'player' && this.time.now - mark < 1400) { d *= 2; this.vfx.play('crit', e.body.x, e.body.y, { scale: 0.8 }); events.emit('toast', { text: 'Ataque combinado!', icon: 'star' }); this.comboMark.delete(e); }
+        if (source === 'player' && this.time.now - mark < 1400) { d *= 2; L.vfx.play('crit', e.body.x, e.body.y, { scale: 0.8 }); events.emit('toast', { text: 'Ataque combinado!', icon: 'star' }); this.comboMark.delete(e); }
         if (e.hurt(d, fromX, element, source, source === 'player' ? this.player.attackId : undefined)) { n++; if (source === 'dragon') this.comboMark.set(e, this.time.now); if (!e.alive) this.onEnemyDead(e); }
       }
-      if (source === 'player') for (const d of this.dragons) if (d !== exclude && d.ready && !d.ridden && !d.far && (!d.rec.bonded || d.rec.trapped) && hits(d.body)) {
+      if (source === 'player') for (const d of L.dragons) if (d !== exclude && d.ready && !d.ridden && !d.far && (!d.rec.bonded || d.rec.trapped) && hits(d.body)) {
         if (this.hitOnce(d)) { d.hurt(dmg, fromX, element, 'player'); n++; }
       }
     } else {
       const pl = this.player;
-      if (pl.alive && hits(pl.body) && !this.mount) { if (this.damagePlayer(1 + (dmg > 2 ? 1 : 0), fromX)) n++; }
-      for (const d of this.dragons) if (d !== exclude && d.rec.bonded && d.ready && hits(d.body)) { d.hurt(dmg * 0.5, fromX, element, source === 'enemy' ? 'enemy' : 'dragon'); n++; }
+      if (L === this.lane && pl.alive && hits(pl.body) && !this.mount) { if (this.damagePlayer(1 + (dmg > 2 ? 1 : 0), fromX)) n++; }
+      for (const d of L.dragons) if (d !== exclude && d.rec.bonded && d.ready && hits(d.body)) { d.hurt(dmg * 0.5, fromX, element, source === 'enemy' ? 'enemy' : 'dragon'); n++; }
     }
     return n;
   }
@@ -263,14 +393,14 @@ export class IslandScene extends Phaser.Scene {
 
   private rest(x: number, y: number): void {
     const p = game.save.player;
-    p.hp = p.maxHp; p.checkpoint = { island: this.island.id, x, y: y }; events.emit('hudDirty');
+    p.hp = p.maxHp; p.checkpoint = { island: this.island.id, x, y: y, lane: this.lane.depth }; events.emit('hudDirty');
     for (const d of this.dragons) if (d.rec.bonded && !d.far) { d.rec.energy = Math.min(1, d.rec.energy + 0.4); d.rec.hp = Math.min(d.ph.stats.maxHp, d.rec.hp + d.ph.stats.maxHp * 0.5); }
     this.vfx.play('heal', this.player.body.x, this.player.body.y); audio.play('bond', 0.5);
     this.saveNow('Progresso salvo. Você descansou junto ao fogo.');
   }
   private saveNow(msg?: string): void {
     const p = game.save.player, b = this.mount ? this.mount.body : this.player.body;
-    p.x = b.x; p.y = b.y; game.save.ocean.atSea = false;
+    p.x = b.x; p.y = b.y; p.lane = this.lane.depth; game.save.ocean.atSea = false;
     game.persist().then(() => { if (msg) events.emit('toast', { text: msg }); }).catch((e: Error) => events.emit('toast', { text: e.message }));
   }
   private useNest(x: number, y: number): void {
@@ -294,7 +424,8 @@ export class IslandScene extends Phaser.Scene {
     o.atSea = true; o.flying = how !== 'boat';
     o.x = site.x + (how === 'fly-east' ? site.r * 1.25 + 60 : -(site.r * 1.25 + 60)); o.y = site.y + (how === 'boat' ? 30 : 0);
     if (comp) { comp.island = this.island.id; }
-    game.save.player.x = -1;
+    game.save.player.x = -1; game.save.player.lane = 0;
+    if (comp) comp.lane = 0;
     void game.persist().catch(() => undefined);
     this.cameras.main.fadeOut(400, 8, 6, 16);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start('Ocean', { from: this.island.id, heading: how === 'fly-east' ? 0 : Math.PI }));
@@ -315,17 +446,20 @@ export class IslandScene extends Phaser.Scene {
   // ── main loop ───────────────────────────────────────────────────────────
   override update(time: number, delta: number): void {
     const dt = Math.min(delta / 1000, 1 / 30);
-    hud.fps = this.game.loop.actualFps; hud.entities = this.dragons.length + this.enemies.length; hud.fxCount = this.vfx.activeCount;
+    hud.fps = this.game.loop.actualFps; hud.entities = this.lanes.reduce((n, l) => n + l.dragons.length + l.enemies.length, 0); hud.fxCount = this.lanes.reduce((n, l) => n + l.vfx.activeCount, 0);
+    this.tagCam = this.lane.cam;
     input.update();
     audio.update(dt, game.daylight);
     if (hud.inMenu || this.leaving) { this.renderOnly(time, dt); return; }
     if (hud.dialog) { if (input.pressed('interact') || input.pressed('jump') || input.pressed('attack') || input.pressed('pause')) { hud.dialog = null; events.emit('dialog', null); audio.play('uiBack'); } this.renderOnly(time, dt); return; }
     if (input.pressed('pause')) { events.emit('openMenu', undefined); return; }
     if (input.pressed('map')) { events.emit('openMenu', { tab: 'map' }); return; }
-    if (this.stop > 0) { this.stop -= dt; this.vfx.update(); return; }
+    if (this.stop > 0) { this.stop -= dt; this.vfx.update(); this.syncLaneCams(dt); return; }
     game.tick(dt);
 
     const pl = this.player, pb = pl.body;
+    // depth lanes: step back / forward
+    if (input.pressed('laneBack')) this.switchLane(-1); else if (input.pressed('laneFront')) this.switchLane(1);
     // build at most one DNA texture per frame, nearest first
     if (this.buildQueue.length) {
       let bi = -1, bd = 900;
@@ -362,6 +496,11 @@ export class IslandScene extends Phaser.Scene {
       if (r.shoot) { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y, vx: ((pb.x - c.x) / d) * 150, vy: ((pb.y - 12 - c.y) / d) * 150, dmg: 1, element: 'storm', friendly: false, fx: 'sparkarc', life: 1.6, scale: 0.35 }); audio.play('zap', 0.5); }
     }
     if (this.enemies.some((e) => !e.alive)) this.enemies = this.enemies.filter((e) => e.alive);
+    if ((this.laneCheckT -= dt) <= 0) {
+      this.laneCheckT = 0.25;
+      const i = this.lanes.indexOf(this.lane), m = this.mount ? this.mount.body : pb, air = !!this.mount?.air || !m.onGround;
+      hud.lanes = { depths: this.lanes.map((l) => l.depth), active: this.lane.depth, canBack: i > 0 && this.freeSpot(this.lanes[i - 1], m, air) !== null, canFront: i < this.lanes.length - 1 && this.freeSpot(this.lanes[i + 1], m, air) !== null };
+    }
 
     // projectiles
     this.shots.update(dt, (p, x, y) => {
@@ -370,6 +509,14 @@ export class IslandScene extends Phaser.Scene {
     });
 
     this.updateDragons(dt);
+    // the other lanes keep living (their dragons roam, sleep and eat) but do not notice the player
+    for (const l of this.lanes) if (l !== this.lane) {
+      this.tagCam = l.cam;
+      this.updateDragonsIn(l, dt, false);
+      for (const t of l.things) t.update?.(dt);
+      l.vfx.update();
+    }
+    this.tagCam = this.lane.cam;
     this.updateThings(dt);
     this.updateWorldFx(time, dt);
     this.updateCamera(dt);
@@ -393,14 +540,17 @@ export class IslandScene extends Phaser.Scene {
     this.vfx.update();
   }
 
-  private renderOnly(time: number, dt: number): void { this.updateWorldFx(time, dt * 0.2); }
+  private renderOnly(time: number, dt: number): void { this.updateWorldFx(time, dt * 0.2); this.syncLaneCams(dt); }
 
   private updateDragons(dt: number): void {
+    if ((this.foodT -= dt) <= 0) { this.foodT = 1; this.foodCache.clear(); }
+    this.updateDragonsIn(this.lane, dt, true);
+  }
+  private updateDragonsIn(L: Lane, dt: number, active: boolean): void {
     const pl = this.player, pb = pl.body, day = game.day, storm = this.island.weather === 'storm';
     let focus: Dragon | null = null, fd = 180;
-    if ((this.foodT -= dt) <= 0) { this.foodT = 1; this.foodCache.clear(); }
-    const aggro = this.enemies.filter((e) => e.alive && e.aggro);
-    for (const d of this.dragons) {
+    const aggro = active ? L.enemies.filter((e) => e.alive && e.aggro) : [];
+    for (const d of [...L.dragons]) {
       const b = d.body, dist = Math.hypot(pb.x - b.x, pb.y - b.y);
       // threats
       let threat: { x: number; y: number; dist: number } | null = null;
@@ -409,18 +559,19 @@ export class IslandScene extends Phaser.Scene {
       let food = this.foodCache.get(d);
       if (food === undefined && !d.far) {
         food = null; let bd = 320;
-        if (d.rec.hunger > 0.45) for (const t of this.things) { const f = t.food?.(); if (!f || f === d.ph.dislikedFood) continue; const dd = Math.hypot(t.x - b.x, t.y - b.y); if (dd < bd && Math.abs(t.x - d.rec.homeX) < d.rec.homeR * 1.6) { bd = dd; food = { x: t.x, y: t.y, thing: t }; } }
+        if (d.rec.hunger > 0.45) for (const t of L.things) { const f = t.food?.(); if (!f || f === d.ph.dislikedFood) continue; const dd = Math.hypot(t.x - b.x, t.y - b.y); if (dd < bd && Math.abs(t.x - d.rec.homeX) < d.rec.homeR * 1.6) { bd = dd; food = { x: t.x, y: t.y, thing: t }; } }
         this.foodCache.set(d, food);
       }
       let other: { x: number; y: number; dist: number; bondedWithPlayer: boolean } | null = null;
-      for (const o of this.dragons) if (o !== d && !o.far) { const dd = Math.hypot(o.body.x - b.x, o.body.y - b.y); if (dd < 170 && (!other || dd < other.dist)) other = { x: o.body.x, y: o.body.y, dist: dd, bondedWithPlayer: o.rec.bonded }; }
-      const visible = dist < 300 && (dist < 60 || this.grid.los(b.x, b.y - b.h * 0.6, pb.x, pb.y - 12));
+      for (const o of L.dragons) if (o !== d && !o.far) { const dd = Math.hypot(o.body.x - b.x, o.body.y - b.y); if (dd < 170 && (!other || dd < other.dist)) other = { x: o.body.x, y: o.body.y, dist: dd, bondedWithPlayer: o.rec.bonded }; }
+      const visible = active && dist < 300 && (dist < 60 || L.data.grid.los(b.x, b.y - b.h * 0.6, pb.x, pb.y - 12));
       d.update(dt, {
         day, night: game.night, storm,
-        player: { x: pb.x, y: pb.y, dist, motion: this.mount ? 'walk' : pl.motion, visible, offering: pl.offering, gesturing: pl.gesturing, mounted: !!this.mount, threatened: pl.hurtRecently > 0 || aggro.length > 0, alive: pl.alive },
+        player: { x: pb.x, y: pb.y, dist: active ? dist : 9999, motion: this.mount ? 'walk' : pl.motion, visible, offering: active ? pl.offering : null, gesturing: active && pl.gesturing, mounted: !!this.mount, threatened: pl.hurtRecently > 0 || aggro.length > 0, alive: pl.alive },
         threat, food: food ? { x: food.x, y: food.y, dist: Math.hypot(food.x - b.x, food.y - b.y) } : null, other,
       });
       if (d.far || !d.ready) continue;
+      if (!active) { d.feedback(); continue; }
       const it = d.intent;
       if (it?.ateWorldFood && food) { food.thing.eaten?.(); this.foodCache.delete(d); }
       if (it?.tookOffer && pl.offering) { const item = pl.offering; if (game.useItem(item)) d.mind.bond.feed(item, day); pl.offering = null; if ((game.save.player.items[item] ?? 0) <= 0) game.cycleItem(1); }
@@ -437,6 +588,7 @@ export class IslandScene extends Phaser.Scene {
         if (d.mind.bondHold >= 2.5) this.completeBond(d);
       } else if (this.focus === d) hud.bondHold = 0;
     }
+    if (!active) return;
     this.focus = focus; hud.focusId = focus?.rec.genes.id ?? null;
     if (this.mount) { this.mount.rec.x = this.mount.body.x; }
   }
@@ -484,7 +636,7 @@ export class IslandScene extends Phaser.Scene {
   }
 
   private updateWorldFx(time: number, dt: number): void {
-    const cam = this.cameras.main, pl = this.player.body, W = this.scale.width;
+    const cam = this.lane.cam, pl = this.player.body, W = this.scale.width;
     // am I under a roof? (background wall tile behind the player)
     const tx = Math.floor(pl.x / TILE), ty = Math.floor((pl.y - 12) / TILE);
     const inside = this.grid.inb(tx, ty) && this.grid.bg[ty * this.grid.w + tx] !== 0;
@@ -498,7 +650,8 @@ export class IslandScene extends Phaser.Scene {
     tint = mix(tint, 0x5a5878, this.caveK * 0.7);
     this.tintRect.setSize(W + 4, GAME_H + 4).setFillStyle(tint);
     this.backdrop.update(dt, cam, sky);
-    this.view.update(time, dt, cam, Math.max(night, this.caveK));
+    for (const l of this.lanes) l.view.update(time, dt, cam, Math.max(night, this.caveK));
+    this.hazeColor = mix(sky, 0xffffff, 0.35);
     const strike = this.weather.update(dt, night, this.caveK > 0.5,
       () => { const x = cam.worldView.x + Math.random() * cam.worldView.width, top = this.grid.groundBelow(x, 0, 200); return top !== null && top < this.island.seaRow * TILE - 60 ? { x, y: top } : null; },
       (x, y) => this.vfx.play('sparkarc', x, y, { scale: 0.7 }));
@@ -507,7 +660,7 @@ export class IslandScene extends Phaser.Scene {
       this.strike({ x: strike.x - 24, y: strike.y - 60, w: 48, h: 70 }, 2, 'storm', false, strike.x, 'enemy');
     }
     // wind streaks inside gust zones near the camera
-    for (const z of this.island.winds) if (z.x < cam.worldView.right && z.x + z.w > cam.worldView.x && Math.random() < dt * 14) {
+    for (const z of this.lane.data.winds) if (z.x < cam.worldView.right && z.x + z.w > cam.worldView.x && Math.random() < dt * 14) {
       const x = z.x + Math.random() * z.w, y = z.y + Math.random() * z.h;
       if (!this.grid.solidPx(x, y)) { const s = this.add.image(x, y, 'ocean', 'streak').setDepth(DEPTH.weather).setAlpha(0.5).setRotation(Math.atan2(z.vy, z.vx || 0.001)); this.tweens.add({ targets: s, x: x + z.vx * 0.5, y: y + z.vy * 0.5, alpha: 0, duration: 500, onComplete: () => s.destroy() }); }
     }
@@ -515,7 +668,7 @@ export class IslandScene extends Phaser.Scene {
   }
 
   private updateCamera(dt: number): void {
-    const cam = this.cameras.main, b = this.mount ? this.mount.body : this.player.body, W = this.scale.width;
+    const cam = this.lane.cam, b = this.mount ? this.mount.body : this.player.body, W = this.scale.width;
     const ahead = this.mount?.air ? Phaser.Math.Clamp(b.vx * 0.42, -110, 110) : this.player.facing * 22;
     this.lookX += (ahead - this.lookX) * Math.min(1, dt * 2.5);
     const ty = b.y - (this.mount?.air ? 30 + Phaser.Math.Clamp(-b.vy * 0.15, -40, 40) : 46);
@@ -524,5 +677,6 @@ export class IslandScene extends Phaser.Scene {
     cam.scrollX += (b.x + this.lookX - W / 2 - cam.scrollX) * Math.min(1, dt * 8);
     cam.scrollY = this.camY - GAME_H / 2 + 20;
     if (this.grid.liquidAt(b.x, b.y - 30) === Liquid.Water && !this.mount) this.tintRect.setFillStyle(mulColor(this.tintRect.fillColor, 0xa8d8f0));
+    this.syncLaneCams(dt);
   }
 }

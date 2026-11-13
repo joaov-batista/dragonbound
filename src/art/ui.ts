@@ -93,11 +93,14 @@ export function paintUiAtlas(): { pix: Pix; frames: F } {
     g_sneak: (p) => { p.ellipse(6, 4, 2.5, 2.5, W); p.poly([[2, 11], [4, 6], [9, 6], [10, 11]], W); },
     g_call: (p) => { p.poly([[1, 4], [5, 4], [9, 1], [9, 11], [5, 8], [1, 8]], W); p.line(11, 4, 11, 8, W); },
     g_item: (p) => { p.rect(2, 4, 8, 7, W); p.rect(4, 1, 4, 3, W); p.erase(5, 2); p.erase(6, 2); },
+    // stacked planes with an arrow: into the background (arrow up) / toward the foreground (arrow down)
+    g_laneback: (p) => { p.poly([[1, 8], [6, 6], [11, 8], [6, 10]], W, 140); p.poly([[1, 6], [6, 4], [11, 6], [6, 8]], W); p.poly([[6, 0], [9, 3], [3, 3]], W); },
+    g_lanefront: (p) => { p.poly([[1, 3], [6, 1], [11, 3], [6, 5]], W, 140); p.poly([[1, 5], [6, 3], [11, 5], [6, 7]], W); p.poly([[6, 11], [9, 8], [3, 8]], W); },
     g_gesture: (p) => { p.rect(3, 5, 6, 6, W); for (let k = 0; k < 4; k++) p.rect(3 + k * 2, 1 + (k === 0 || k === 3 ? 1 : 0), 1, 4, W); p.rect(1, 6, 2, 2, W); },
   };
   Object.entries(glyphs).forEach(([n, fn], i) => put(n, i * 14, 148, 12, 12, fn));
   // logo ornament + cursor
-  put('cursor', 180, 148, 8, 9, (p) => { p.poly([[0, 0], [7, 4], [0, 8]], 0xf2c14e); p.outline(OUT); });
+  put('cursor', 236, 148, 8, 9, (p) => { p.poly([[0, 0], [7, 4], [0, 8]], 0xf2c14e); p.outline(OUT); });
   put('vignette', 0, 164, 64, 40, (p) => { for (let y = 0; y < 40; y++) for (let x = 0; x < 64; x++) { const d = Math.hypot((x - 31.5) / 32, (y - 19.5) / 20); if (d > 0.7) p.px(x, y, 0x080410, Math.min(1, (d - 0.7) / 0.7) * 150); } });
   return { pix, frames };
 }

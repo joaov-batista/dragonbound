@@ -56,23 +56,28 @@ class GameState {
 
   islandState(id: string): IslandState { return (this.save.islands[id] ??= { populated: false, taken: [], regrow: {} }); }
 
-  /** First visit: seed the island's wild population from its habitats (deterministic per world seed). */
+  /** First visit: seed the island's wild population from its habitats in every lane (deterministic per world seed). */
   populate(island: IslandData): void {
     const st = this.islandState(island.id);
-    if (st.populated) return;
-    st.populated = true;
-    const base = hashInts(this.save.worldSeed, hashString(island.id));
-    island.habitats.forEach((h, hi) => {
-      for (let i = 0; i < h.count; i++) {
-        const seed = hashInts(base, hi, i);
-        const genes = createWild(h.species, seed, this.registry);
-        const off = ((seed % 1000) / 1000 - 0.5) * h.r;
-        this.makeRecord(genes, island.id, h.x + off, h.y, h.r, 8 + (seed % 30));
+    const lanes = [{ depth: 0, data: island }, ...(island.lanes ?? [])];
+    for (const { depth, data } of lanes) {
+      const key = depth === 0 ? 'populated' : `lane${depth}`;
+      if (depth === 0 ? st.populated : st.taken.includes(key)) continue;
+      if (depth === 0) st.populated = true; else st.taken.push(key);
+      const base = hashInts(this.save.worldSeed, hashString(data.id));
+      data.habitats.forEach((h, hi) => {
+        for (let i = 0; i < h.count; i++) {
+          const seed = hashInts(base, hi, i);
+          const genes = createWild(h.species, seed, this.registry);
+          const off = ((seed % 1000) / 1000 - 0.5) * h.r;
+          const rec = this.makeRecord(genes, island.id, h.x + off, h.y, h.r, 8 + (seed % 30));
+          if (depth !== 0) rec.lane = depth;
+        }
+      });
+      if (depth === 0) for (const s of data.spawns) if (s.t === 'trap') {
+        const rec = this.makeRecord(this.pickRideable(s.species, hashInts(base, s.seed)), island.id, s.x, s.y, 180, 12);
+        rec.trapped = true; rec.injured = true; rec.hp *= 0.35; rec.hunger = 0.85; rec.fear = 35;
       }
-    });
-    for (const s of island.spawns) if (s.t === 'trap') {
-      const rec = this.makeRecord(this.pickRideable(s.species, hashInts(base, s.seed)), island.id, s.x, s.y, 180, 12);
-      rec.trapped = true; rec.injured = true; rec.hp *= 0.35; rec.hunger = 0.85; rec.fear = 35;
     }
   }
   /** The trapped dragon is the intended first mount: search seeds for an adult-sized, not-too-aggressive one. */

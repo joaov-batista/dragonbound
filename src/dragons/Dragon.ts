@@ -31,7 +31,7 @@ export class Dragon implements Damageable {
   private texKey = ''; private anim: DragonAnim | '' = ''; private stuckT = 0; private lastX = 0; private stuck = false; private hitFlash = 0; private farT = 0;
   private flapSfx = 0; private s: number;
 
-  constructor(private world: World, readonly rec: DragonRecord) {
+  constructor(public world: World, readonly rec: DragonRecord) {
     this.ph = game.phenotype(rec); this.mind = new DragonMind(rec, this.ph);
     this.s = this.ph.size * game.scale(rec);
     this.body = makeBody(rec.x, rec.y, Math.max(12, 30 * this.s), Math.max(10, 21 * this.s));
@@ -206,6 +206,9 @@ export class Dragon implements Damageable {
       if (e.text) events.emit('toast', { text: e.text });
     }
   }
+
+  /** Every display object belonging to this dragon (for moving it between depth lanes). */
+  objects(): Phaser.GameObjects.GameObject[] { return [this.sprite, this.emote, ...(this.trap ? [this.trap] : []), ...(this.saddleImg ? [this.saddleImg] : [])]; }
 
   destroy(): void { this.sprite.destroy(); this.emote.destroy(); this.trap?.destroy(); this.saddleImg?.destroy(); }
 }

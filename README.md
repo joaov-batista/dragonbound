@@ -36,6 +36,7 @@ Adicione `?debug=1` à URL para expor `__game`, `__state`, `__scene`, `__ocean` 
 | Oferecer / usar item (segure) | F | D-direita |
 | Próximo item | G | D-esquerda |
 | Gesto de calma (segure) | H | D-baixo |
+| Camada do fundo / da frente | Q / Z | analógico direito ↑ / ↓ |
 | Pausa / mapa | Esc / M | Start / Select |
 
 Tudo é remapeável em **Pausa → Controles**. No celular os controles aparecem ao primeiro toque e podem ser movidos em **Opções**.

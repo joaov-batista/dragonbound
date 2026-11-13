@@ -21,6 +21,8 @@ const DEFS: Omit<Widget, 'img' | 'icon' | 'knob' | 'pointer' | 'x' | 'y'>[] = [
   { id: 'sneak', action: 'sneak', frame: 'tb_n', glyph: 'g_sneak', r: 13, small: true, modes: ['ground'], def: (_W, H) => [118, H - 24] },
   { id: 'gesture', action: 'gesture', frame: 'tb_n', glyph: 'g_gesture', r: 13, small: true, modes: ['ground'], def: (_W, H) => [150, H - 24] },
   { id: 'call', action: 'call', frame: 'tb_n', glyph: 'g_call', r: 13, small: true, modes: ['ground', 'boat'], def: (_W, H) => [122, H - 58] },
+  { id: 'laneBack', action: 'laneBack', frame: 'tb_n', glyph: 'g_laneback', r: 12, small: true, modes: ['ground', 'flight'], def: (_W, H) => [22, H - 140] },
+  { id: 'laneFront', action: 'laneFront', frame: 'tb_n', glyph: 'g_lanefront', r: 12, small: true, modes: ['ground', 'flight'], def: (_W, H) => [22, H - 112] },
   { id: 'pause', action: 'pause', frame: 'tb_n', glyph: 'g_pause', r: 12, small: true, modes: [...ALL, 'title'], def: (W) => [W - 18, 16] },
 ];
 

@@ -60,3 +60,28 @@ describe('body physics', () => {
     expect(b.x).toBeGreaterThan(d.start.x + 200);
   });
 });
+
+describe('depth lanes', () => {
+  it('every island has a background and a foreground lane, explorable and populated, sharing the coastline', async () => {
+    const { laneList } = await import('../src/world/islands/lanes');
+    for (const site of MAIN_SITES) {
+      const d = loadIsland(site), lanes = laneList(d);
+      expect(lanes.map((l) => l.depth)).toEqual([-1, 0, 1]);
+      for (const { data } of lanes) {
+        const g = data.grid;
+        expect(g.w).toBe(d.grid.w); expect(data.seaRow).toBe(d.seaRow);
+        expect(data.habitats.length).toBeGreaterThan(0);
+        expect(g.liquidAt(8, (d.seaRow + 1) * 16)).toBe(Liquid.Water);
+        // there is walkable ground above the sea somewhere in the middle of the lane
+        let walk = 0;
+        for (let x = 40; x < g.w - 40; x++) { const top = g.groundBelow(x * 16 + 8, 0, g.h); if (top !== null && top < d.seaRow * 16) walk++; }
+        expect(walk).toBeGreaterThan((g.w - 80) * 0.5);
+      }
+      // the lanes differ from the main lane (different relief), and from each other
+      const sig = (g: typeof d.grid): string => Array.from(g.cells).join('');
+      expect(new Set(lanes.map((l) => sig(l.data.grid))).size).toBe(3);
+      // deterministic
+      expect(sig(laneList(loadIsland(site))[0].data.grid)).toBe(sig(lanes[0].data.grid));
+    }
+  });
+});

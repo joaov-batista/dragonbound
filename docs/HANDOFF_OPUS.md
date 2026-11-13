@@ -70,6 +70,9 @@ Confiança 0–100 e medo 0–100. Estágios: Arisco <15, Desconfiado <35, Curio
 - `archipelago.ts`: mapa 6400×4400, 3 ilhas fixas + ilhotas determinísticas por chunk de 640 px (`isletInChunk`). `loadIsland(site)` constrói a ilha lateral (uma em memória por vez).
 - `GameState.populate` cria a população de cada ilha na primeira visita (determinística por `worldSeed`).
 
+### Camadas de profundidade
+`withLanes`/`laneList` (`world/islands/lanes.ts`) geram Fundo/Frente por ilha; `IslandScene` mantém `lanes: Lane[]` (cada uma com grid, `World`, `VfxManager`, `Projectiles`, dragões, inimigos, interações, câmera, névoa e filtro) e `lane` ativa. Getters (`grid`, `dragons`, `enemies`, `vfx`…) apontam para a camada ativa. Objetos novos vão para a câmera em `tagCam`; ao mover algo de camada use `tagTo(obj, cam)`. Troca: `switchLane(±1)`.
+
 ## 12. Voo e combate
 - `Flight.updateRide`: no chão anda; pulo decola. No ar (modelo "planeio arcade"): solto = mantém altitude/paira, direção = cruzeiro, cima = sobe com fôlego, baixo = mergulho que vira velocidade, inversão freia antes de virar, teto suave por relevo (`ceilingY`), batida de asas, dash reto com rastro e invencibilidade (sem pirueta, a pedido do usuário), mordida, sopro elemental (projétil), zonas de vento, turbulência em tempestade. Resposta aos comandos depende de treino, agilidade, independência.
 - Sair pela borda da ilha voando → `OceanScene` em voo. No oceano o voo é top-down (direção + fôlego + vento de cauda).

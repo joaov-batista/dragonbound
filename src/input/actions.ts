@@ -1,10 +1,10 @@
-export const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'attack', 'dash', 'parry', 'interact', 'mount', 'ability', 'call', 'sneak', 'item', 'itemNext', 'gesture', 'pause', 'map'] as const;
+export const ACTIONS = ['left', 'right', 'up', 'down', 'jump', 'attack', 'dash', 'parry', 'interact', 'mount', 'ability', 'call', 'sneak', 'item', 'itemNext', 'gesture', 'laneBack', 'laneFront', 'pause', 'map'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export const ACTION_LABELS: Record<Action, string> = {
   left: 'Esquerda', right: 'Direita', up: 'Cima', down: 'Baixo', jump: 'Pular / Bater asas', attack: 'Atacar', dash: 'Dash / Esquiva',
   parry: 'Aparar', interact: 'Interagir / Acariciar', mount: 'Montar / Desmontar', ability: 'Habilidade do dragão', call: 'Assobiar / Chamar',
-  sneak: 'Andar devagar', item: 'Oferecer / Usar item', itemNext: 'Próximo item', gesture: 'Gesto de calma', pause: 'Pausa', map: 'Mapa',
+  sneak: 'Andar devagar', item: 'Oferecer / Usar item', itemNext: 'Próximo item', gesture: 'Gesto de calma', laneBack: 'Ir para a camada do fundo', laneFront: 'Ir para a camada da frente', pause: 'Pausa', map: 'Mapa',
 };
 
 /** A gamepad binding: button index, or axis index with direction. */
@@ -20,12 +20,12 @@ export function defaultBindings(): Bindings {
     keys: {
       left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'],
       jump: ['Space'], attack: ['KeyJ'], dash: ['KeyK'], parry: ['KeyL'], interact: ['KeyE'], mount: ['KeyR'], ability: ['KeyI'],
-      call: ['KeyC'], sneak: ['ShiftLeft'], item: ['KeyF'], itemNext: ['KeyG'], gesture: ['KeyH'], pause: ['Escape', 'Enter'], map: ['KeyM'],
+      call: ['KeyC'], sneak: ['ShiftLeft'], item: ['KeyF'], itemNext: ['KeyG'], gesture: ['KeyH'], laneBack: ['KeyQ'], laneFront: ['KeyZ'], pause: ['Escape', 'Enter'], map: ['KeyM'],
     },
     pad: {
       left: [{ a: 0, d: -1 }], right: [{ a: 0, d: 1 }], up: [{ a: 1, d: -1 }], down: [{ a: 1, d: 1 }],
       jump: [{ b: 0 }], attack: [{ b: 2 }], dash: [{ b: 1 }], interact: [{ b: 3 }], parry: [{ b: 4 }], ability: [{ b: 5 }],
-      sneak: [{ b: 6 }], mount: [{ b: 7 }], call: [{ b: 12 }], gesture: [{ b: 13 }], itemNext: [{ b: 14 }], item: [{ b: 15 }], pause: [{ b: 9 }], map: [{ b: 8 }],
+      sneak: [{ b: 6 }], mount: [{ b: 7 }], call: [{ b: 12 }], gesture: [{ b: 13 }], itemNext: [{ b: 14 }], item: [{ b: 15 }], laneBack: [{ a: 3, d: -1 }], laneFront: [{ a: 3, d: 1 }], pause: [{ b: 9 }], map: [{ b: 8 }],
     },
     deadzone: 0.22, sensitivity: 1, invertFlightY: false,
   };

@@ -4,6 +4,7 @@ import { buildStarter } from '../islands/starter';
 import { buildStorm } from '../islands/storm';
 import { buildVolcanic } from '../islands/volcanic';
 import type { IslandData } from '../islands/types';
+import { withLanes } from '../islands/lanes';
 import { generateIsland, isletName } from './proceduralIsland';
 
 /** Ocean-scale description of an island (top-down map units = pixels of the ocean scene). */
@@ -45,10 +46,10 @@ export function siteById(worldSeed: number, id: string): IslandSite | undefined 
 /** Build (or rebuild) the explorable side-view island for a site. Only one is in memory at a time. */
 export function loadIsland(site: IslandSite): IslandData {
   switch (site.id) {
-    case 'alvamar': return buildStarter();
-    case 'brasaviva': return buildVolcanic();
-    case 'trovao': return buildStorm();
-    default: { const d = generateIsland(site.seed, site.biome); d.id = site.id; return d; }
+    case 'alvamar': return withLanes(buildStarter());
+    case 'brasaviva': return withLanes(buildVolcanic());
+    case 'trovao': return withLanes(buildStorm());
+    default: { const d = generateIsland(site.seed, site.biome); d.id = site.id; return withLanes(d); }
   }
 }
 

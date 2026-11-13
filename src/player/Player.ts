@@ -28,7 +28,7 @@ export class Player implements Damageable {
   private anim: HeroAnim = 'idle'; private stepT = 0; private wallLock = 0; private pose: HeroAnim | null = null; private poseT = 0; private ghostT = 0;
   private dashDir = { x: 1, y: 0 };
 
-  constructor(private world: World, x: number, y: number) {
+  constructor(public world: World, x: number, y: number) {
     this.body = makeBody(x, y, 10, 22);
     this.sprite = world.scene.add.sprite(x, y, 'hero', 'idle_0').setOrigin(22 / 48, 44 / 48).setDepth(DEPTH.player);
   }

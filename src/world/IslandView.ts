@@ -59,7 +59,7 @@ export class IslandView {
 
   private makeLiquidTextures(water: number): void {
     const mk = (key: string, top: number, body: number, hi: number): void => {
-      if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+      if (this.scene.textures.exists(key)) return; // shared by every lane of the island; removed on scene shutdown
       const p = new Pix(32, 8);
       for (let x = 0; x < 32; x++) {
         const y = Math.round(2 + Math.sin((x / 32) * Math.PI * 2) * 1.2 + Math.sin((x / 32) * Math.PI * 4) * 0.6);

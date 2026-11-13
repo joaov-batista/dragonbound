@@ -18,7 +18,8 @@ export class VfxManager {
   private live = new Set<Phaser.GameObjects.Sprite>();
   private manifest: VfxManifest;
 
-  constructor(private scene: Phaser.Scene) {
+  /** `onCreate` is called for every object this manager shows (incl. pooled reuse) — the island scene uses it to put effects in the right depth lane. */
+  constructor(private scene: Phaser.Scene, private onCreate?: (o: Phaser.GameObjects.GameObject) => void) {
     this.manifest = scene.cache.json.get('vfx-manifest') as VfxManifest;
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.pool.length = 0; this.live.clear(); });
   }
@@ -52,6 +53,7 @@ export class VfxManager {
     s.setData('follow', o.follow ?? null); s.setData('off', o.follow ? [x - o.follow.x, y - o.follow.y] : null);
     s.anims.timeScale = o.speed ?? 1;
     s.play({ key: 'fx-' + key, repeat: loop ? -1 : 0 });
+    this.onCreate?.(s);
     this.live.add(s);
     if (!loop) s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.release(s));
     return s;
@@ -80,6 +82,7 @@ export class VfxManager {
       tint: color, emitting: false, blendMode: o.add ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL,
     });
     em.setDepth(o.depth ?? DEPTH.vfx);
+    this.onCreate?.(em);
     em.explode(count);
     this.scene.time.delayedCall((o.life ?? 420) + 60, () => em.destroy());
   }
@@ -87,6 +90,7 @@ export class VfxManager {
   /** Floating number / word (damage, +trust). */
   floatText(x: number, y: number, text: string, color = 0xffffff): void {
     const t = this.scene.add.bitmapText(Math.round(x), Math.round(y), 'jersey', text).setOrigin(0.5, 1).setTint(color).setDepth(DEPTH.vfx + 5);
+    this.onCreate?.(t);
     this.scene.tweens.add({ targets: t, y: y - 22, alpha: { from: 1, to: 0 }, duration: 800, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
   }
 }

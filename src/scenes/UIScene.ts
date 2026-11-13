@@ -9,6 +9,7 @@ import { keyLabel, padBindLabel, type Action } from '../input/actions';
 import { input } from '../input/InputManager';
 import { COL, bar, panel, txt, wrap } from '../ui/kit';
 import { OCEAN_H, OCEAN_W, allSites } from '../world/generation/archipelago';
+import { LANE_NAMES } from '../world/islands/lanes';
 import { Menu } from '../ui/Menu';
 import { TouchControls } from '../ui/TouchControls';
 
@@ -24,6 +25,7 @@ export class UIScene extends Phaser.Scene {
   private vignette!: Phaser.GameObjects.Image; private compass!: Phaser.GameObjects.BitmapText;
   touch!: TouchControls; menu!: Menu;
   private mm!: Phaser.GameObjects.Container; private mmImg!: Phaser.GameObjects.Image; private mmGfx!: Phaser.GameObjects.Graphics; private mmBg!: Phaser.GameObjects.NineSlice; private mmLabel!: Phaser.GameObjects.BitmapText;
+  private laneGfx!: Phaser.GameObjects.Graphics; private laneLabel!: Phaser.GameObjects.BitmapText;
   private mmKind: string | null = null; private mmVer = -1; private mmDisc = -1;
   private sawTouch = false; private dirty = true;
 
@@ -44,7 +46,8 @@ export class UIScene extends Phaser.Scene {
     this.fps = txt(this, 4, 0, '', COL.dim); this.compass = txt(this, 0, 0, '', COL.gold).setOrigin(0.5, 0);
     this.mm = this.add.container(0, 0).setDepth(600);
     this.mmBg = panel(this, 0, 0, 104, 74, 'panel'); this.mmImg = this.add.image(4, 4, 'ui', 'white').setOrigin(0); this.mmGfx = this.add.graphics(); this.mmLabel = txt(this, 52, 0, '', COL.dim).setOrigin(0.5, 0);
-    this.mm.add([this.mmBg, this.mmImg, this.mmGfx, this.mmLabel]);
+    this.laneGfx = this.add.graphics(); this.laneLabel = txt(this, 0, 0, '', COL.text);
+    this.mm.add([this.mmBg, this.mmImg, this.mmGfx, this.mmLabel, this.laneGfx, this.laneLabel]);
     this.touch = new TouchControls(this);
     this.menu = new Menu(this, this.touch, () => this.toTitle());
 
@@ -118,9 +121,9 @@ export class UIScene extends Phaser.Scene {
       g.fillStyle(m.flying ? 0x7fe8d0 : 0xffffff, 1).lineStyle(1, 0x0c0e1a, 1);
       g.fillTriangle(px + Math.cos(a) * 5, py + Math.sin(a) * 5, px + Math.cos(a + 2.4) * 3.5, py + Math.sin(a + 2.4) * 3.5, px + Math.cos(a - 2.4) * 3.5, py + Math.sin(a - 2.4) * 3.5);
       g.strokeTriangle(px + Math.cos(a) * 5, py + Math.sin(a) * 5, px + Math.cos(a + 2.4) * 3.5, py + Math.sin(a + 2.4) * 3.5, px + Math.cos(a - 2.4) * 3.5, py + Math.sin(a - 2.4) * 3.5);
-      this.mmBg.setSize(104, 74); this.mmLabel.setText('');
+      this.mmBg.setSize(104, 74); this.mmLabel.setText(''); this.laneGfx.clear(); this.laneLabel.setText('');
     } else {
-      if (this.mmKind !== 'island' || this.mmVer !== hud.mmVersion) { this.mmKind = 'island'; this.mmVer = hud.mmVersion; this.mmImg.setTexture('mm-island'); }
+      if (this.mmKind !== m.tex || this.mmVer !== hud.mmVersion) { this.mmKind = m.tex; this.mmVer = hud.mmVersion; if (this.textures.exists(m.tex)) this.mmImg.setTexture(m.tex); }
       const px = 4 + Phaser.Math.Clamp(m.fx, 0, 1) * 96, py = 4 + Phaser.Math.Clamp(m.fy, 0, 1) * 40;
       const blink = Math.floor(this.time.now / 300) % 2 === 0, rx = Math.round(px), ry = Math.round(py);
       g.fillStyle(0x0c0e1a, 1).fillRect(rx - 3, ry - 5, 7, 7).fillStyle(m.flying ? 0x7fe8d0 : 0xffe070, 1).fillRect(rx - 2, ry - 4, 5, 5);
@@ -128,6 +131,19 @@ export class UIScene extends Phaser.Scene {
       g.fillStyle(0xf2c14e, 1).fillTriangle(px + m.facing * 6, py - 2, px + m.facing * 3, py - 4, px + m.facing * 3, py);
       this.mmBg.setSize(104, 48);
       this.mmLabel.setText('');
+      // depth-lane widget: three planes in perspective (back = narrow, front = wide)
+      const L = hud.lanes, lg = this.laneGfx; lg.clear();
+      if (L) {
+        const y0 = 52;
+        this.mmBg.setSize(104, 84);
+        L.depths.forEach((d, i) => {
+          const w = 30 + i * 14, x = 52 - w / 2, y = y0 + i * 9, on = d === L.active;
+          const reachable = (d === L.active - 1 && L.canBack) || (d === L.active + 1 && L.canFront);
+          lg.fillStyle(on ? 0xf2c14e : reachable ? 0x3a4468 : 0x1d2238, 1).fillRect(x, y, w, 6);
+          lg.lineStyle(1, on ? 0xffffff : reachable ? 0xd8dcef : 0x3a4468, 1).strokeRect(x, y, w, 6);
+        });
+        this.laneLabel.setText(LANE_NAMES[L.active] ?? '').setOrigin(0.5, 0).setPosition(52, y0 + 26);
+      } else this.laneLabel.setText('');
     }
     const top = this.touch.visible ? 30 : 4;
     this.mm.setPosition(W - 108, top);

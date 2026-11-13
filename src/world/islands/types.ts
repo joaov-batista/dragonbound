@@ -29,4 +29,6 @@ export interface IslandData {
   grid: TileGrid; seaRow: number;
   props: PropPlacement[]; spawns: Spawn[]; habitats: Habitat[]; winds: WindZone[]; lights: LightDef[];
   start: { x: number; y: number }; weather: WeatherId;
+  /** Parallel depth lanes at the same location (-1 = background, +1 = foreground). The island itself is lane 0. */
+  lanes?: { depth: number; data: IslandData }[];
 }

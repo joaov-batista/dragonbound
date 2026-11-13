@@ -14,7 +14,7 @@ export interface DragonRecord {
   hp: number; hunger: number; energy: number;
   trust: number; fear: number; bonded: boolean; training: number; observed: number;
   drift: Partial<Record<Trait, number>>; memories: Memory[];
-  island: string; homeX: number; homeY: number; homeR: number; x: number; y: number;
+  island: string; /** depth lane on that island (-1 back, 0 main, 1 front); absent = 0 */ lane?: number; homeX: number; homeY: number; homeR: number; x: number; y: number;
   follow: boolean; trapped: boolean; injured: boolean; met: boolean; eggOf?: string;
 }
 

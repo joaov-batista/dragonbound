@@ -5,7 +5,7 @@ import type { ItemId } from '../world/islands/types';
 export interface IslandState { populated: boolean; taken: string[]; regrow: Record<string, number> }
 export interface SaveData {
   version: number; worldSeed: number; day: number; playtime: number; savedAt: number;
-  player: { island: string; x: number; y: number; hp: number; maxHp: number; items: Record<ItemId, number>; selected: ItemId; checkpoint: { island: string; x: number; y: number } };
+  player: { island: string; lane?: number; x: number; y: number; hp: number; maxHp: number; items: Record<ItemId, number>; selected: ItemId; checkpoint: { island: string; x: number; y: number; lane?: number } };
   dragons: Record<string, DragonRecord>;
   companion: string | null;
   islands: Record<string, IslandState>;
