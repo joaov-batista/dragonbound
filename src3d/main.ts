@@ -379,7 +379,7 @@ class Game {
     if (!d.air) {
       this.camYaw -= lx; this.camPitch = Math.max(-0.2, Math.min(1.1, this.camPitch + ly));
       const mag = Math.min(1, Math.hypot(input.mx, input.my));
-      if (mag > 0.1) { const a = Math.atan2(input.mx, input.my) + this.camYaw; d.heading = turnTo(d.heading, a, dt * 5); d.speed += (8 * mag - d.speed) * Math.min(1, dt * 4); } else d.speed *= Math.max(0, 1 - dt * 6);
+      if (mag > 0.1) { const a = Math.atan2(-input.mx, input.my) + this.camYaw; d.heading = turnTo(d.heading, a, dt * 5); d.speed += (8 * mag - d.speed) * Math.min(1, dt * 4); } else d.speed *= Math.max(0, 1 - dt * 6);
       d.pos.x += Math.sin(d.heading) * d.speed * dt; d.pos.z += Math.cos(d.heading) * d.speed * dt;
       d.pos.y = Math.max(height(d.pos.x, d.pos.z), SEA - 0.3);
       this.stamina = Math.min(maxSt, this.stamina + 25 * dt);

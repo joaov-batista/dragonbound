@@ -77,7 +77,7 @@ export class Hero {
     else if (this.act === 'block') this.act = 'none';
     if (input.pressed('dash') && this.act !== 'roll' && this.act !== 'hurt' && this.onGround && this.spend(22)) {
       this.start('roll'); this.iframes = Math.max(this.iframes, 0.32);
-      const a = mag > 0.1 ? Math.atan2(mx, my) + camYaw : this.heading; this.heading = a;
+      const a = mag > 0.1 ? Math.atan2(-mx, my) + camYaw : this.heading; this.heading = a;
       this.vel.x = Math.sin(a) * 10; this.vel.z = Math.cos(a) * 10; audio.play('dash', 0.6);
     }
     if ((this.act === 'attack' && this.actT > 0.34) || (this.act === 'heavy' && this.actT > 0.6) || (this.act === 'roll' && this.actT > 0.45) || (this.act === 'hurt' && this.actT > 0.35)) { if (this.act === 'attack') this.comboT = 0.45; this.act = 'none'; }
@@ -88,7 +88,7 @@ export class Hero {
     if (this.act === 'roll') { this.vel.x *= Math.max(0, 1 - dt * 3); this.vel.z *= Math.max(0, 1 - dt * 3); this.motion = 'walk'; this.stillT = 0; }
     else if (busy) { this.vel.x *= Math.max(0, 1 - dt * 14); this.vel.z *= Math.max(0, 1 - dt * 14); }
     else if (mag > 0.1 && !this.offering) {
-      const a = Math.atan2(mx, my) + camYaw;
+      const a = Math.atan2(-mx, my) + camYaw;
       this.heading = turnTo(this.heading, lockAt && this.act === 'block' ? Math.atan2(lockAt.x - this.pos.x, lockAt.z - this.pos.z) : a, dt * 12);
       const tx = Math.sin(a) * speed * mag, tz = Math.cos(a) * speed * mag;
       this.vel.x += (tx - this.vel.x) * Math.min(1, dt * 10); this.vel.z += (tz - this.vel.z) * Math.min(1, dt * 10);
