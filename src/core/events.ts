@@ -14,6 +14,8 @@ export interface GameEvents {
   openMenu: { tab?: string } | undefined;
   closeMenu: undefined;
   modeChanged: 'ground' | 'flight' | 'boat' | 'menu';
+  talk: import('../story/story').Talk;
+  openShop: { who: string };
 }
 
 class Bus {

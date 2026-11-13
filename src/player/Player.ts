@@ -10,6 +10,7 @@ import { input } from '../input/InputManager';
 import { makeBody, moveBody, type Body, type Rect } from '../physics/Body';
 import { Liquid } from '../physics/TileGrid';
 import { approach } from '../utils/rng';
+import { swordBonus } from '../story/story';
 
 const RUN = 108, SNEAK = 42, ACC = 900, AIR_ACC = 620, FRICTION = 1200, GRAV = 900, JUMP = -262, MAX_FALL = 330;
 const COYOTE = 0.1, BUFFER = 0.13, DASH_V = 275, DASH_T = 0.15, DASH_CD = 0.38, WALL_SLIDE = 55;
@@ -86,7 +87,7 @@ export class Player implements Damageable {
     this.combo = air ? 0 : this.comboT > 0 ? (this.combo % 3) + 1 : 1;
     const a: HeroAnim = air ? 'airattack' : (`attack${this.combo}` as HeroAnim);
     this.t = HERO_ANIMS[a].n / HERO_ANIMS[a].fps + 0.04; this.play(a, true);
-    this.attackId++; this.attackHeavy = this.combo === 3; this.attackDmg = this.attackHeavy ? 2 : 1;
+    this.attackId++; this.attackHeavy = this.combo === 3; this.attackDmg = (this.attackHeavy ? 2 : 1) + swordBonus();
     const f = this.facing, b = this.body;
     const fx = air ? 'spin' : this.combo === 1 ? 'slash' : this.combo === 2 ? 'slash2' : 'cleave';
     this.world.vfx.play(fx, b.x + (air ? 0 : f * 2), b.y, { flip: f < 0, follow: b, scale: air ? 0.8 : 1, speed: fx === 'cleave' ? 2.2 : 1.3 });

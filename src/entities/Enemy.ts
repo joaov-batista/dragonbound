@@ -15,9 +15,18 @@ export const ENEMY_DEFS: Record<EnemyKind, Def> = {
   bat: { hp: 2, speed: 70, sight: 130, fly: true, drop: null, weak: 'storm', name: 'Sombrilho' },
   magma: { hp: 4, speed: 40, sight: 120, fly: false, drop: 'ember', weak: 'water', name: 'Lavárcula' },
   wasp: { hp: 3, speed: 60, sight: 170, fly: true, drop: null, weak: 'ice', name: 'Vespa-trovão' },
+  hunter: { hp: 5, speed: 48, sight: 160, fly: false, drop: 'coin', name: 'Caçador de Escama' },
 };
 
-export class Enemy implements Damageable {
+/** What the island scene needs from anything hostile (creatures, hunters, bosses, chain anchors). */
+export interface EnemyLike {
+  kind: string; body: Body; alive: boolean; aggro: boolean; hp: number; drop: ItemId | null; center: { x: number; y: number }; contactDmg?: number;
+  update(dt: number, px: number, py: number, playerAlive: boolean): { contact: boolean; shoot: boolean };
+  hurt(dmg: number, fromX: number, element: Element | 'physical', src: unknown, attackId?: number): boolean;
+  stagger(): void;
+}
+
+export class Enemy implements Damageable, EnemyLike {
   body: Body; sprite: Phaser.GameObjects.Sprite; alive = true; hp: number; aggro = false; stun = 0;
   private def: Def; private state: 'idle' | 'chase' | 'windup' | 'attack' | 'recover' = 'idle'; private t = 0; private dir = 1; private homeX: number; private homeY: number; private flash = 0; private phase = Math.random() * 6;
   private hitIds = new Set<number>();
@@ -26,11 +35,17 @@ export class Enemy implements Damageable {
     this.def = ENEMY_DEFS[kind]; this.hp = this.def.hp; this.homeX = x; this.homeY = y;
     const [w, h] = ENEMY_SIZE[kind];
     this.body = makeBody(x, y, w * 0.6, h * 0.7);
-    this.sprite = world.scene.add.sprite(x, y, 'enemies', `${kind}_move_0`).setOrigin(0.5, 1).setDepth(DEPTH.entities);
+    const human = kind === 'hunter';
+    this.sprite = world.scene.add.sprite(x, y, human ? 'people' : 'enemies', human ? 'hunter_walk_0' : `${kind}_move_0`).setOrigin(human ? 22 / 48 : 0.5, human ? 44 / 48 : 1).setDepth(DEPTH.entities);
     this.sprite.play(`en-${kind}-move`);
   }
   static createAnims(scene: Phaser.Scene): void {
+    for (const [a, src, n] of [['move', 'walk', 8], ['attack', 'work', 4]] as const) {
+      const key = `en-hunter-${a}`; if (scene.anims.exists(key)) continue;
+      scene.anims.create({ key, frames: Array.from({ length: n }, (_, i) => ({ key: 'people', frame: `hunter_${src}_${i}` })), frameRate: a === 'move' ? 11 : 12, repeat: a === 'move' ? -1 : 0 });
+    }
     for (const kind of Object.keys(ENEMY_DEFS)) for (const [a, n] of Object.entries(ENEMY_FRAMES)) {
+      if (kind === 'hunter') continue;
       const key = `en-${kind}-${a}`; if (scene.anims.exists(key)) continue;
       scene.anims.create({ key, frames: Array.from({ length: n }, (_, i) => ({ key: 'enemies', frame: `${kind}_${a}_${i}` })), frameRate: a === 'move' ? 8 : 9, repeat: a === 'move' ? -1 : 0 });
     }
@@ -72,6 +87,15 @@ export class Enemy implements Damageable {
     } else {
       this.dir = Math.sign(dx) || 1;
       switch (this.kind) {
+        case 'hunter':
+          // crossbow from range, short-blade lunge up close
+          if (this.state === 'attack') { anim = 'attack'; if (this.t <= 0) { this.state = 'recover'; this.t = 0.6; } }
+          else if (this.state === 'windup') { anim = 'attack'; b.vx = approach(b.vx, 0, 400 * dt); if (this.t <= 0) { out.shoot = true; this.state = 'recover'; this.t = 1.4; } }
+          else if (this.state === 'recover') { b.vx = approach(b.vx, 0, 300 * dt); if (this.t <= 0) this.state = 'idle'; }
+          else if (Math.abs(dx) < 40 && b.onGround) { this.state = 'attack'; this.t = 0.45; b.vx = this.dir * 150; }
+          else if (Math.abs(dx) > 70 && Math.abs(dx) < 170 && Math.abs(dy) < 50 && Math.random() < dt * 0.9) { this.state = 'windup'; this.t = 0.55; }
+          else b.vx = approach(b.vx, this.dir * d.speed, 240 * dt);
+          break;
         case 'crab': case 'magma':
           if (this.state === 'attack') { anim = 'attack'; if (this.t <= 0) this.state = 'idle'; }
           else if (Math.abs(dx) < 46 && b.onGround && this.t <= 0) { this.state = 'attack'; this.t = 0.5; b.vx = this.dir * (this.kind === 'magma' ? 120 : 150); b.vy = this.kind === 'magma' ? -230 : -120; }
@@ -111,8 +135,10 @@ export class Enemy implements Damageable {
 
   private cur = 'move';
   private sync(anim: 'move' | 'attack' | 'hurt'): void {
-    if (anim !== this.cur) { this.cur = anim; if (anim === 'hurt') { this.sprite.anims.stop(); this.sprite.setFrame(`${this.kind}_hurt_0`); } else this.sprite.play(`en-${this.kind}-${anim}`); }
-    this.sprite.setPosition(Math.round(this.body.x), Math.round(this.body.y) + 2).setFlipX(this.dir < 0);
+    if (anim !== this.cur) { this.cur = anim; if (anim === 'hurt') { this.sprite.anims.stop(); this.sprite.setFrame(this.kind === 'hunter' ? 'hunter_hurt_0' : `${this.kind}_hurt_0`); } else this.sprite.play(`en-${this.kind}-${anim}`); }
+    const human = this.kind === 'hunter';
+    this.sprite.setPosition(Math.round(this.body.x), Math.round(this.body.y) + (human ? 1 : 2)).setFlipX(this.dir < 0);
+    if (human) this.sprite.setOrigin(this.dir < 0 ? 1 - 22 / 48 : 22 / 48, 44 / 48);
     if (this.flash > 0) this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL); else this.sprite.clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
   }
   get drop(): ItemId | null { return this.def.drop; }

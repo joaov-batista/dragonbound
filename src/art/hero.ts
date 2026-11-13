@@ -10,8 +10,20 @@ interface Pose {
   air?: boolean; // feet not constrained to the ground line
 }
 
-const SKIN = ramp(0xd9955f), HAIR = ramp(0x33283f), TUNIC = ramp(0x3f55a0), PANTS = ramp(0xc8b086);
-const LEATHER = ramp(0x7c4a2e), SCARF = ramp(0xe4533c), BLADE = ramp(0xd8e6dc), BAND = 0xf2c14e;
+/** Look of a character drawn with the hero rig: villagers, hunters and bosses reuse the same skeleton. */
+export interface HeroStyle {
+  skin: number; hair: number; tunic: number; pants: number; leather: number; scarf: number | null; band: number | null;
+  hairStyle: 'tuft' | 'long' | 'bald' | 'braid' | 'bun'; beard: 'none' | 'short' | 'long'; hat: 'none' | 'hood' | 'helm' | 'cap';
+  hatColor?: number; cloak?: number; apron?: number; bulk?: number;
+}
+export const HERO_STYLE: HeroStyle = { skin: 0xd9955f, hair: 0x33283f, tunic: 0x3f55a0, pants: 0xc8b086, leather: 0x7c4a2e, scarf: 0xe4533c, band: 0xf2c14e, hairStyle: 'tuft', beard: 'none', hat: 'none' };
+let SKIN = ramp(0xd9955f), HAIR = ramp(0x33283f), TUNIC = ramp(0x3f55a0), PANTS = ramp(0xc8b086);
+let LEATHER = ramp(0x7c4a2e), SCARF = ramp(0xe4533c), BAND = 0xf2c14e, ST: HeroStyle = HERO_STYLE;
+const BLADE = ramp(0xd8e6dc);
+function useStyle(st: HeroStyle): void {
+  ST = st; SKIN = ramp(st.skin); HAIR = ramp(st.hair); TUNIC = ramp(st.tunic); PANTS = ramp(st.pants); LEATHER = ramp(st.leather);
+  SCARF = ramp(st.scarf ?? st.tunic); BAND = st.band ?? HAIR[1];
+}
 const OUT = 0x1a1424;
 
 const GROUND = 44, HIP_Y = 34, CX = 22;
@@ -59,7 +71,8 @@ function sword(p: Pix, x: number, y: number, a: number): void {
   }
 }
 
-export function drawHero(p: Pix, ox: number, oy: number, q: Pose): void {
+export function drawHero(p: Pix, ox: number, oy: number, q: Pose, style: HeroStyle = HERO_STYLE): void {
+  useStyle(style);
   const hipX = ox + CX + q.hx, hipY = oy + HIP_Y + q.hy;
   const [tx, ty] = dir(180 - q.lean, 8.5);
   const nx = hipX + tx, ny = hipY + ty; // neck
@@ -70,9 +83,10 @@ export function drawHero(p: Pix, ox: number, oy: number, q: Pose): void {
   const footY = (lift: number): number => (q.air ? hipY + 10 - lift : g - lift);
 
   const layer = new Pix(p.w, p.h);
-  // scarf (behind everything)
+  // scarf / cloak (behind everything)
   let sx = nx - 1.5, sy = ny + 0.5;
-  for (let i = 0; i < 4; i++) {
+  if (ST.cloak !== undefined) { const cr = ramp(ST.cloak), a = deg(q.scarf * 0.6 + 70); layer.poly([[nx - 3, ny], [nx + 1, ny], [nx - 2 - Math.cos(a) * 9, ny + Math.sin(a) * 11 + 1], [nx - 6 - Math.cos(a) * 9, ny + Math.sin(a) * 10]], cr[1]); }
+  for (let i = 0; i < (ST.scarf === null ? 0 : 4); i++) {
     const a = deg(q.scarf + Math.sin(q.wave + i * 1.3) * 22 * (0.4 + i * 0.3));
     const ex = sx - Math.cos(a) * 3.6, ey = sy + Math.sin(a) * 3.6;
     layer.limb(sx, sy, ex, ey, 1.9 - i * 0.25, 1.6 - i * 0.3, SCARF);
@@ -83,7 +97,9 @@ export function drawHero(p: Pix, ox: number, oy: number, q: Pose): void {
   leg(layer, hipX - 1, hipY, hipX + q.fB[0], footY(q.fB[1]), true);
   if (q.sword !== null && q.sword < -900) sword(layer, backHand[0], backHand[1], q.sword + 2000);
   // torso
-  layer.limb(hipX, hipY - 0.5, nx, ny + 1.5, 3.1, 3.3, TUNIC);
+  const bulk = ST.bulk ?? 1;
+  layer.limb(hipX, hipY - 0.5, nx, ny + 1.5, 3.1 * bulk, 3.3 * bulk, TUNIC);
+  if (ST.apron !== undefined) layer.limb(hipX + 1, hipY + 1, nx + 1, ny + 3, 2.2, 2.4, ramp(ST.apron));
   layer.limb(hipX - 0.5, hipY, hipX + 0.5, hipY, 3, 3, PANTS);
   const [bx, by] = dir(180 - q.lean, 2.2);
   layer.line(hipX + bx - 3, hipY + by, hipX + bx + 3, hipY + by, LEATHER[2]);
@@ -91,18 +107,26 @@ export function drawHero(p: Pix, ox: number, oy: number, q: Pose): void {
   // front leg
   leg(layer, hipX + 1, hipY, hipX + q.fF[0], footY(q.fF[1]), false);
   // scarf knot
-  layer.limb(nx - 2, ny + 1, nx + 2.5, ny + 1.5, 1.7, 1.5, SCARF);
+  if (ST.scarf !== null) layer.limb(nx - 2, ny + 1, nx + 2.5, ny + 1.5, 1.7, 1.5, SCARF);
   // head
   layer.ball(headX, headY, 4.6, 4.4, SKIN);
-  // hair: cap + back tuft
-  for (let y = -6; y <= 2; y++)
+  // hair styles
+  if (ST.hairStyle !== 'bald') for (let y = -6; y <= 2; y++)
     for (let x = -6; x <= 5; x++) {
       const nxh = x / 5.2, nyh = (y + 1) / 4.6;
       if (nxh * nxh + nyh * nyh <= 1 && (y < -1 - Math.max(0, x) * 0.45 || x < -2)) layer.px(headX + x, headY + y, x + y < -5 ? HAIR[3] : y > -1 ? HAIR[1] : HAIR[2]);
     }
-  layer.limb(headX - 4, headY - 2, headX - 7.5, headY - 3 + Math.sin(q.wave) * 1.2, 1.6, 0.7, HAIR);
-  layer.limb(headX - 4, headY, headX - 6.5, headY + 1.5 + Math.cos(q.wave) * 1, 1.3, 0.6, ramp(HAIR[1]));
-  layer.line(headX - 4, headY - 2, headX + 4, headY - 2.4, BAND);
+  if (ST.hairStyle === 'tuft') {
+    layer.limb(headX - 4, headY - 2, headX - 7.5, headY - 3 + Math.sin(q.wave) * 1.2, 1.6, 0.7, HAIR);
+    layer.limb(headX - 4, headY, headX - 6.5, headY + 1.5 + Math.cos(q.wave) * 1, 1.3, 0.6, ramp(HAIR[1]));
+  } else if (ST.hairStyle === 'long') layer.limb(headX - 3, headY - 1, headX - 4.5, headY + 7 + Math.sin(q.wave) * 0.6, 2.2, 1.3, HAIR);
+  else if (ST.hairStyle === 'braid') { for (let k = 0; k < 4; k++) layer.ball(headX - 4.5, headY + 1 + k * 2.2, 1.4, 1.2, k % 2 ? ramp(HAIR[1]) : HAIR); }
+  else if (ST.hairStyle === 'bun') layer.ball(headX - 3.5, headY - 4.5, 2.2, 2, HAIR);
+  if (ST.beard !== 'none') { const L = ST.beard === 'long' ? 5 : 2.5; layer.limb(headX + 1.5, headY + 2.5, headX + 2, headY + 2.5 + L, 2.4, 1.2, HAIR); }
+  if (ST.hat === 'hood') { const hr = ramp(ST.hatColor ?? ST.tunic); layer.ball(headX - 0.5, headY - 1.5, 5.2, 4.4, hr); layer.poly([[headX - 5, headY - 1], [headX - 8, headY + 4], [headX - 4, headY + 3]], hr[1]); layer.px(headX + 2, headY - 0.5, 0); }
+  else if (ST.hat === 'helm') { const hr = ramp(ST.hatColor ?? 0x8a8a9a); layer.ball(headX, headY - 2.4, 5, 3.2, hr); layer.rect(headX - 5, headY - 1, 10, 1, hr[1]); layer.line(headX + 3, headY - 1, headX + 3, headY + 2, hr[2]); }
+  else if (ST.hat === 'cap') { const hr = ramp(ST.hatColor ?? 0x7a5a8a); layer.ball(headX - 0.5, headY - 3.2, 4.6, 2.4, hr); layer.rect(headX - 2, headY - 2, 7, 1, hr[1]); }
+  if (ST.band !== null && ST.hat === 'none') layer.line(headX - 4, headY - 2, headX + 4, headY - 2.4, BAND);
   // face
   if (q.eye === 'open') { layer.px(headX + 2, headY, OUT); layer.px(headX + 2, headY + 1, OUT); layer.px(headX + 3, headY, 0xffffff); }
   else if (q.eye === 'closed') { layer.px(headX + 2, headY + 1, OUT); layer.px(headX + 3, headY + 1, OUT); }
@@ -113,6 +137,7 @@ export function drawHero(p: Pix, ox: number, oy: number, q: Pose): void {
   if (q.sword !== null && q.sword > -900) sword(layer, hand[0], hand[1], q.sword);
   layer.outline(OUT);
   p.blit(layer, 0, 0);
+  useStyle(HERO_STYLE);
 }
 
 const P = (o: Partial<Pose>): Pose => ({

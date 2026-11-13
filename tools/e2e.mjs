@@ -41,7 +41,7 @@ async function main() {
   await page.goto(URL);
   check('game boots to the title screen', await waitFor(page, () => window.__game?.scene.isActive('Title')));
   await sleep(600); await page.screenshot({ path: join(SHOTS, '01-title.png') });
-  await page.evaluate(() => { window.__state.newGame(4242); window.__game.scene.getScene('Title').scene.start('Island', { islandId: 'alvamar', entry: 'load' }); });
+  await page.evaluate(() => { window.__state.newGame(4242); const sv = window.__state.save; sv.story ??= { quests: { welcome: { stage: 0, done: false } }, flags: {}, tracked: 'welcome' }; sv.story.flags.intro = 1; window.__game.scene.getScene('Title').scene.start('Island', { islandId: 'alvamar', entry: 'load' }); });
   check('island scene loads', await waitFor(page, () => window.__scene?.player && window.__scene.dragons.length > 0));
   await sleep(1500);
   const S = (fn, arg) => page.evaluate(fn, arg);
@@ -77,7 +77,7 @@ async function main() {
   for (let i = 0; i < 8 && !laneOk; i++) { await page.keyboard.press('KeyQ'); await sleep(500); laneOk = (await laneOf()) === -1; if (!laneOk) { await page.keyboard.down('KeyD'); await sleep(350); await page.keyboard.up('KeyD'); } }
   const backDragons = await S(() => window.__scene.lane.dragons.map((d) => d.rec.genes.species));
   check('Q steps into the background lane, which has its own dragons', laneOk && backDragons.length > 0, backDragons.join(','));
-  await page.keyboard.down('KeyD'); await sleep(700); await page.keyboard.up('KeyD');
+  await page.keyboard.down('KeyD'); await sleep(700); await page.keyboard.up('KeyD'); await sleep(500);
   const bx = await S(() => window.__scene.player.body.onGround);
   check('the background lane is walkable', bx);
   await page.screenshot({ path: join(SHOTS, '03b-lane-back.png') });
@@ -220,7 +220,7 @@ async function main() {
   m.on('pageerror', (e) => errors.push('mobile: ' + String(e.stack ?? e).slice(0, 300)));
   await m.goto(URL);
   await waitFor(m, () => window.__game?.scene.isActive('Title')); await sleep(500);
-  await m.evaluate(() => { window.__state.newGame(7); window.__game.scene.getScene('Title').scene.start('Island', { islandId: 'alvamar', entry: 'load' }); });
+  await m.evaluate(() => { window.__state.newGame(7); const sv = window.__state.save; sv.story ??= { quests: { welcome: { stage: 0, done: false } }, flags: {}, tracked: 'welcome' }; sv.story.flags.intro = 1; window.__game.scene.getScene('Title').scene.start('Island', { islandId: 'alvamar', entry: 'load' }); });
   await waitFor(m, () => window.__scene?.player); await sleep(1200);
   const size = await m.evaluate(() => ({ w: window.__game.scale.width, h: window.__game.scale.height }));
   // tap once so the overlay appears, then drive stick + jump simultaneously (multitouch)

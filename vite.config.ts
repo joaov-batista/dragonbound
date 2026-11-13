@@ -7,7 +7,7 @@ export default defineConfig({
   server: { host: true },
   plugins: [
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate', // new versions install and take over by themselves — no reinstalling the app
       includeAssets: ['icons/*.png'],
       manifest: {
         name: 'Dragonbound', short_name: 'Dragonbound', lang: 'pt-BR',
@@ -24,7 +24,7 @@ export default defineConfig({
         // precache the whole game so it runs offline after the first visit / install
         globPatterns: ['**/*.{js,css,html,png,json,xml,webmanifest}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        cleanupOutdatedCaches: true, clientsClaim: false, skipWaiting: false,
+        cleanupOutdatedCaches: true, clientsClaim: true, skipWaiting: true,
       },
     }),
   ],

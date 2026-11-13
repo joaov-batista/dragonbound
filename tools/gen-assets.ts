@@ -42,7 +42,8 @@ if (PREV) savePreview(PREV + '/props.png', props.pix, 2, 0x6fa8c0);
 
 import { paintEnemyAtlas, paintOceanAtlas } from '../src/art/enemies';
 import { paintUiAtlas } from '../src/art/ui';
-for (const [name, a] of [['enemies', paintEnemyAtlas()], ['ocean', paintOceanAtlas()], ['ui', paintUiAtlas()]] as const) {
+import { paintPeopleAtlas } from '../src/art/people';
+for (const [name, a] of [['enemies', paintEnemyAtlas()], ['ocean', paintOceanAtlas()], ['ui', paintUiAtlas()], ['people', paintPeopleAtlas()]] as const) {
   savePng(`${PUB}sprites/${name}.png`, a.pix);
   saveAtlas(`${PUB}sprites/${name}.json`, `${name}.png`, a.pix, a.frames);
   if (PREV) savePreview(`${PREV}/${name}.png`, a.pix, 3, 0x4a7a9a);

@@ -11,5 +11,7 @@ export const hud = {
   mmVersion: 0,
   /** Depth-lane indicator: lane depths available on this island, the active one, and whether moving back/front is possible right here. */
   lanes: null as null | { depths: number[]; active: number; canBack: boolean; canFront: boolean },
+  /** Active boss bar. */
+  boss: null as null | { name: string; hp: number; max: number },
   inMenu: false, dialog: null as string | null,
 };

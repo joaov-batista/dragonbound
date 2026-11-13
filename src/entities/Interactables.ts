@@ -6,9 +6,10 @@ import { ITEM_NAMES, game } from '../core/state';
 import type { World } from '../core/world';
 import type { IslandView } from '../world/IslandView';
 import type { ItemId, Spawn } from '../world/islands/types';
+import { flag, setFlag } from '../story/story';
 
 export interface Interactable {
-  kind: Spawn['t']; id: string; x: number; y: number; range: number;
+  kind: Spawn['t'] | 'npc'; id: string; x: number; y: number; range: number;
   prompt(): string | null; use(): void;
   /** Natural food for dragons? */
   food?: () => ItemId | null; eaten?: () => void;
@@ -31,7 +32,9 @@ export function buildInteractables(ctx: InteractCtx, spawns: Spawn[]): Interacta
         sc.tweens.add({ targets: g, y: g.y - 4, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         let gone = false;
         out.push({ kind: 'pickup', id: s.id, x: s.x, y: s.y - 8, range: 14, auto: true, prompt: () => null,
-          use: () => { if (gone) return; gone = true; st.taken.push(s.id); game.addItem(s.item); g.destroy(); glow?.destroy(); w.vfx.play('collect', s.x, s.y, { scale: 0.7 }); audio.play(relic ? 'chest' : 'pickup'); events.emit('toast', { text: relic ? `Fragmento antigo (${game.save.stats.relics})` : `+1 ${ITEM_NAMES[s.item]}`, icon: s.item }); },
+          use: () => { if (gone) return; gone = true; st.taken.push(s.id); game.addItem(s.item); g.destroy(); glow?.destroy(); w.vfx.play('collect', s.x, s.y, { scale: 0.7 }); audio.play(relic ? 'chest' : 'pickup');
+            if (s.secret) { setFlag(s.secret); const n = ['secret_cellar', 'secret_pier', 'secret_falls'].filter((k) => flag(k)).length; w.vfx.play('levelup', s.x, s.y, { scale: 0.7 }); events.emit('toast', { text: `Segredo de Vigiamar encontrado! (${n}/3)`, icon: 'star' }); }
+            else events.emit('toast', { text: relic ? `Fragmento antigo (${game.save.stats.relics})` : `+1 ${ITEM_NAMES[s.item]}`, icon: s.item }); },
           food: () => (gone || relic || s.item === 'shell' ? null : s.item), eaten: () => { if (!gone) { gone = true; g.destroy(); } } });
         break;
       }

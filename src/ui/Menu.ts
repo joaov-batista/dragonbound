@@ -11,6 +11,7 @@ import { TRAITS, type Trait } from '../dragons/genetics/types';
 import { DragonTextures } from '../dragons/rendering/DragonTextures';
 import { ACTIONS, ACTION_LABELS, findConflicts, keyLabel, padBindLabel, rebindKey, rebindPad, type Action } from '../input/actions';
 import { input } from '../input/InputManager';
+import { QUESTS, activeQuests, doneQuests, quest, type QuestId } from '../story/story';
 import { SaveManager } from '../save/SaveManager';
 import { OCEAN_H, OCEAN_W, allSites } from '../world/generation/archipelago';
 import type { ItemId } from '../world/islands/types';
@@ -18,7 +19,7 @@ import { COL, LINE, panel, txt, wrap } from './kit';
 import type { TouchControls } from './TouchControls';
 
 interface Row { label: string; value?: string; icon?: string; tint?: number; select?: () => void; adjust?: (dir: number) => void; hint?: string }
-const TABS = [['inv', 'Itens'], ['dragons', 'Dragões'], ['map', 'Mapa'], ['options', 'Opções'], ['controls', 'Controles'], ['system', 'Sistema']] as const;
+const TABS = [['inv', 'Itens'], ['quests', 'Missões'], ['dragons', 'Dragões'], ['map', 'Mapa'], ['options', 'Opções'], ['controls', 'Controles'], ['system', 'Sistema']] as const;
 type TabId = (typeof TABS)[number][0];
 
 const ITEM_DESC: Record<ItemId, string> = {
@@ -26,6 +27,7 @@ const ITEM_DESC: Record<ItemId, string> = {
   meat: 'Carne de caça. Dragões de fogo e de caverna costumam aceitar. Cura 1 coração.', herb: 'Erva curativa. Cura 2 corações — e fecha os ferimentos de um dragão.',
   shroom: 'Cogumelo que brilha no escuro. Iguaria para dragões de caverna.', ember: 'Cristal quente como brasa. Petisco dos Cinzais. Não coma.',
   shell: 'Concha que reluz ao sol. Dragões curiosos ou brincalhões não resistem. Use para mostrar.', relic: 'Fragmento dos antigos Vinculados. Dizem que, reunidos, contam uma história.',
+  coin: 'Moedas de Vigiamar. Compre e venda no Mercado do Cais.',
 };
 const TRAIT_WORDS: Record<Trait, [string, string]> = {
   courage: ['Medroso', 'Corajoso'], curiosity: ['Indiferente', 'Curioso'], aggression: ['Manso', 'Agressivo'], intelligence: ['Instintivo', 'Esperto'], sociability: ['Solitário', 'Sociável'],
@@ -73,6 +75,9 @@ export class Menu {
       case 'inv': return (Object.keys(ITEM_NAMES) as ItemId[]).filter((i) => (game.save.player.items[i] ?? 0) > 0 || i === game.save.player.selected).map((i) => ({
         label: ITEM_NAMES[i], value: `x${game.save.player.items[i] ?? 0}`, icon: i, tint: i === game.save.player.selected ? COL.gold : COL.text, hint: ITEM_DESC[i],
         select: USABLE.includes(i) ? () => { game.save.player.selected = i; events.emit('hudDirty'); audio.play('ui'); } : undefined }));
+      case 'quests': return [...activeQuests().sort((a, b) => Number(b.main) - Number(a.main)), ...doneQuests()].map((q) => ({
+        label: q.title, value: quest(q.id)?.done ? 'concluída' : q.main ? 'principal' : 'secundária', icon: quest(q.id)?.done ? 'star' : 'scroll', tint: quest(q.id)?.done ? COL.dim : q.main ? COL.gold : COL.text,
+        hint: q.id, select: () => { if (!quest(q.id)?.done && game.save.story) { game.save.story.tracked = q.id; this.status = `Acompanhando: ${q.title}`; } } }));
       case 'dragons': return this.known().map((r, i) => ({ label: r.met && (r.observed > 0.25 || r.bonded) ? r.name : '???', value: STAGE_LABEL[bondStage(r)], icon: 'el_' + SPECIES[r.genes.species].element, tint: r.genes.id === game.save.companion ? COL.gold : r.bonded ? COL.teal : COL.text,
         select: () => { this.dragonIdx = i; if (r.bonded && game.save.companion !== r.genes.id) { game.save.companion = r.genes.id; r.follow = true; this.status = `${r.name} agora é seu companheiro.`; audio.play('bond', 0.4); } } }));
       case 'map': return [];
@@ -171,7 +176,7 @@ export class Menu {
     this.rows = this.buildRows();
     this.idx = Math.min(this.idx, this.rows.length - 1);
     const listX = mx + 8, listY = top + 26, listH = H - top - 30 - 30, vis = Math.floor(listH / LINE);
-    const split = this.tab === 'inv' || this.tab === 'dragons';
+    const split = this.tab === 'inv' || this.tab === 'dragons' || this.tab === 'quests';
     const listW = split ? Math.floor(pw * 0.38) : pw - 16;
     if (this.idx >= 0) { if (this.idx < this.scroll) this.scroll = this.idx; if (this.idx >= this.scroll + vis) this.scroll = this.idx - vis + 1; }
     this.scroll = Phaser.Math.Clamp(this.scroll, 0, Math.max(0, this.rows.length - vis));
@@ -195,6 +200,15 @@ export class Menu {
       if (r?.hint) add(txt(sc, rx, listY, wrap(sc, r.hint, rw), COL.text));
       add(txt(sc, rx, H - 62, wrap(sc, `Fragmentos antigos: ${game.save.stats.relics}   Vínculos: ${game.save.stats.bonded}   Voos: ${game.save.stats.flights}   Dia ${Math.floor(game.day) + 1}`, rw), COL.dim));
       if (!this.rows.length) add(txt(sc, listX, listY, 'Mochila vazia.', COL.dim));
+    } else if (this.tab === 'quests') {
+      const r = this.rows[Math.max(0, this.idx)], q = r?.hint ? QUESTS[r.hint as QuestId] : null;
+      if (!q) add(txt(sc, rx, listY, 'Nenhuma missão ainda.', COL.dim));
+      else {
+        const st = quest(q.id); let yy = listY;
+        for (const [line, c] of [[q.summary, COL.text], [st?.done ? 'Concluída.' : `Agora: ${q.stages[Math.min(st?.stage ?? 0, q.stages.length - 1)].text}`, st?.done ? COL.dim : COL.teal], [`Recompensa: ${q.reward.text}`, COL.gold]] as const) {
+          const t = add(txt(sc, rx, yy - 2, wrap(sc, line, rw), c)); yy += t.height + 3;
+        }
+      }
     } else if (this.tab === 'dragons') this.drawDragon(add, rx, listY, rw);
     else if (this.tab === 'map') this.drawMap(add, mx + 8, top + 24, pw - 16, H - top - 30 - 26);
     add(txt(sc, mx + 8, H - 24, this.status || this.helpLine(), this.status ? COL.gold : COL.dim));

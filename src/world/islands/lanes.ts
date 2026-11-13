@@ -25,8 +25,14 @@ const RECIPES: Record<BiomeId, Record<-1 | 1, LaneRecipe>> = {
 function surfaceHeights(main: IslandData): number[] {
   const g = main.grid, out: number[] = [];
   for (let x = 0; x < g.w; x++) {
+    // first solid run that is the actual ground (skip floating islets: solid with open air beneath)
     let y = 0;
-    while (y < g.h && g.cells[y * g.w + x] !== Cell.Solid) y++;
+    for (;;) {
+      while (y < g.h && g.cells[y * g.w + x] !== Cell.Solid) y++;
+      let k = y; while (k < g.h && g.cells[k * g.w + x] === Cell.Solid) k++;
+      if (k >= g.h || k - y >= 8 || y >= g.h) break;
+      y = k;
+    }
     out.push(main.seaRow - y);
   }
   return out;
@@ -44,15 +50,18 @@ function buildLane(main: IslandData, depth: -1 | 1): IslandData {
       : h - t * (2 + 3 * Math.abs(Math.sin(x / 13 + ph)));                           // foreground: lower shore and marsh
     return Math.round(Math.max(-9, Math.min(depth < 0 ? 46 : 30, v)));
   });
+  const hook = main.laneHooks?.[depth], res = hook?.reserve;
+  hook?.heights?.(b.heights);
   b.terrain();
-  const inner = (lo: number, hi: number): number => randInt(r, Math.round(g.w * lo), Math.round(g.w * hi));
+  const inRes = (x: number): boolean => !!res && x >= res[0] - 4 && x <= res[1] + 4;
+  const inner = (lo: number, hi: number): number => { for (let k = 0; k < 20; k++) { const x = randInt(r, Math.round(g.w * lo), Math.round(g.w * hi)); if (!inRes(x)) return x; } return Math.round(g.w * hi); };
   // flat spots for features
   const flats: number[] = [];
-  for (let x = 50; x < g.w - 56; x++) if (b.heights[x] > 3 && Math.abs(b.heights[x] - b.heights[x + 6]) <= 1 && Math.abs(b.heights[x] - b.heights[x + 3]) <= 1) flats.push(x);
+  for (let x = 50; x < g.w - 56; x++) if (!inRes(x) && !inRes(x + 6) && b.heights[x] > 3 && Math.abs(b.heights[x] - b.heights[x + 6]) <= 1 && Math.abs(b.heights[x] - b.heights[x + 3]) <= 1) flats.push(x);
   if (depth < 0) {
     // a cave under the tallest hill, and a ruined shrine on a flat
     let px = 60, pe = -99;
-    for (let x = 60; x < g.w - 60; x++) if (b.heights[x] > pe) { pe = b.heights[x]; px = x; }
+    for (let x = 60; x < g.w - 60; x++) if (!inRes(x - 16) && !inRes(x + 16) && b.heights[x] > pe) { pe = b.heights[x]; px = x; }
     if (pe >= 10) {
       const e = Math.max(2, Math.round(pe * 0.4));
       b.tunnel([[px - 16, b.heights[px - 16] + 1], [px - 7, e + 1]], 2).chamber(px, e + 1, 8, 4).tunnel([[px + 7, e + 1], [px + 16, b.heights[px + 16] + 1]], 2);
@@ -76,6 +85,7 @@ function buildLane(main: IslandData, depth: -1 | 1): IslandData {
     b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'relic', id }), inner(0.3, 0.7));
   }
   b.floodSea();
+  hook?.build?.(b);
   b.spawn((p, id) => ({ t: 'campfire', ...p, id }), inner(0.35, 0.65));
   b.spawn((p, id) => ({ t: 'chest', ...p, id, loot: pick(r, rec.food), n: 3 }), inner(0.6, 0.8));
   for (let k = 0; k < 5; k++) {
@@ -87,7 +97,7 @@ function buildLane(main: IslandData, depth: -1 | 1): IslandData {
     const kind = pick(r, rec.enemies), x = inner(0.2, 0.8);
     b.spawn((p) => ({ t: 'enemy', kind, x: p.x, y: kind === 'bat' || kind === 'wasp' ? p.y - 60 : p.y }), x);
   }
-  rec.species.forEach((sp, i, all) => b.habitat(sp, Math.round(g.w * (all.length === 1 ? 0.55 : 0.3 + (0.4 * i) / (all.length - 1))), 16, i === 0 ? 2 : 1));
+  rec.species.forEach((sp, i, all) => { let hx = Math.round(g.w * (all.length === 1 ? 0.55 : 0.3 + (0.4 * i) / (all.length - 1))); if (inRes(hx)) hx = res![1] + 30; b.habitat(sp, hx, 16, i === 0 ? 2 : 1); });
   b.decorate(depth < 0 ? 1.35 : 0.9);
   const d = b.build({ name: main.name, subtitle: main.subtitle, startX: Math.round(g.w / 2), weather: main.weather });
   return d;

@@ -179,7 +179,7 @@ export class OceanScene extends Phaser.Scene {
     hud.fps = this.game.loop.actualFps; hud.entities = this.creatures.length; hud.fxCount = this.vfx.activeCount;
     inp.update(); audio.update(dt, game.daylight);
     if (hud.inMenu || this.leaving) return;
-    if (hud.dialog) { if (inp.pressed('interact') || inp.pressed('jump') || inp.pressed('pause')) { hud.dialog = null; events.emit('dialog', null); } return; }
+    if (hud.dialog) return;
     if (inp.pressed('pause')) { events.emit('openMenu', undefined); return; }
     if (inp.pressed('map')) { events.emit('openMenu', { tab: 'map' }); return; }
     game.tick(dt); this.t += dt; this.cd -= dt; this.inv -= dt; this.dashT -= dt; this.dashCd -= dt; this.ghostT -= dt;

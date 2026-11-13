@@ -33,10 +33,25 @@ for (const ev of ['contextmenu', 'gesturestart', 'dblclick']) document.addEventL
 // save when the tab is hidden or closed (mobile browsers may kill background tabs)
 document.addEventListener('visibilitychange', () => { if (document.hidden && phaser.scene.isActive('Island')) void state.persist().catch(() => undefined); });
 
-// PWA: versioned service worker with an update prompt
+// PWA: auto-updating service worker. A new deploy is fetched in the background, activates immediately
+// and the page reloads once (after saving) — installed apps on phone and desktop never need reinstalling.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   void import('virtual:pwa-register').then(({ registerSW }) => {
-    const update = registerSW({ immediate: true, onNeedRefresh() { const b = document.getElementById('update'); if (b) { b.hidden = false; b.onclick = () => void update(true); } } });
+    registerSW({
+      immediate: true,
+      onRegisteredSW(_url, reg) {
+        if (!reg) return;
+        const check = (): void => { if (navigator.onLine) void reg.update().catch(() => undefined); };
+        setInterval(check, 20 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      },
+    });
+    // only reload when a NEW worker replaces an existing one (not on the very first install)
+    let reloading = false; const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading || !hadController) return; reloading = true;
+      void state.persist().catch(() => undefined).finally(() => location.reload());
+    });
   });
 }
 if (DEBUG) Object.assign(window, { __game: phaser, __state: state, __input: input });

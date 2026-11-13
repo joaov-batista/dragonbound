@@ -1,6 +1,6 @@
 # PROGRESS
 
-Última atualização: sessão 1 (construção da base).
+Última atualização: sessão 3 (Vigiamar, história, chefes e atualização automática).
 
 ## Versão 0.2 beta (sessão 2)
 - Voo: a pirueta foi removida; **dash** em linha reta (ilha e mar) com rastro, invencibilidade breve e custo de fôlego.
@@ -18,6 +18,19 @@
 - Simulação: os dragões das outras camadas continuam vivos (andam, dormem, comem), mas não percebem o jogador; inimigos fora da camada ativa ficam parados. Dano nunca atravessa camadas.
 - Save: `player.lane`, `checkpoint.lane`, `DragonRecord.lane` (opcionais; ausente = 0). HUD: indicador de camada sob o minimapa; minimapa por camada.
 - Custo: 5 câmeras e 2 filtros ativos. ~54 fps no Chromium headless com GL por software; **não medido em celular**.
+
+## Vigiamar e a história (sessão 3)
+- **Vila de Vigiamar** em Alvamar: Salão Principal no alto da praça, ferraria, estábulo, cais e mercado com bancas. NPCs com rigs próprios (`src/art/people.ts`, `src/entities/Npc.ts`) e diálogos por página.
+- **Missões** (`src/story/story.ts`): principais *Boas-vindas a Vigiamar*, *O dragão na rede*, *Rastros dos Caçadores* e *O Gigante Acorrentado*; secundárias *Brasa para a forja*, *Peixe para o mercado*, *Os três segredos de Vigiamar* e *Cuidar de um dragão*. Missão rastreada no HUD; flags salvas em `save.story`.
+- **Mercado** (`src/ui/Shop.ts`): comprar e vender itens com moedas.
+- **Vilões:** os Caçadores de Escama da Capitã Varga Ferro-Rubro. **Chefes** (`src/entities/Boss.ts`): Bruto Garra-de-Ferro (duas fases, com reforços) e o Gigante Acorrentado (correntes presas em âncoras que precisam ser quebradas antes de libertar o alfa), com a arena fechada durante a luta. Varga aparece em cena.
+- Abertura com o Velho Tor; três segredos escondidos pela vila.
+- Camadas laterais ignoram ilhotas flutuantes ao copiar o relevo (antes, viravam paredes altas no Fundo e na Frente); ganchos por ilha (`laneHooks`) reservam espaço para o conteúdo autoral.
+
+## Atualização automática (sessão 3)
+- O service worker usa `registerType: 'autoUpdate'` com `skipWaiting` e `clientsClaim`. Depois de um deploy, o app instalado (celular ou desktop) baixa a versão nova em segundo plano. Ele confere ao abrir, ao voltar para a aba e a cada 20 min, salva o jogo e recarrega uma vez. **Não é preciso reinstalar o app.**
+- `vercel.json` manda `sw.js`, `index.html`, o manifest e `registerSW.js` sem cache, para a checagem sempre ver o deploy novo. Os assets com hash continuam com cache imutável.
+- No primeiro acesso a página não recarrega: só quando um worker novo substitui um antigo.
 
 ## Fase atual
 Fases 1–8 do plano têm implementação jogável. O projeto está em **polimento e aprofundamento** (ver "Próximos passos").
@@ -45,7 +58,7 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
 | Entrada: teclado, Gamepad API, toque multitouch; remapeamento com conflitos | pronto | unit + e2e (teclado/toque). **Gamepad físico não testado** |
 | HUD, menus (itens, dragões, mapa, opções, controles, sistema), título | pronto | e2e |
 | Save em IndexedDB com versão + migração, exportar/importar | pronto | unit + e2e |
-| PWA: manifest, service worker, precache, offline, aviso de atualização | pronto | e2e (registro, cache, boot offline) |
+| PWA: manifest, service worker, precache, offline, atualização automática | pronto | e2e (registro, cache, boot offline) |
 | Áudio sintetizado (SFX, vozes, ambiente, música generativa) com 5 volumes | implementado | **não verificado por ouvido** (headless não tem áudio) |
 | Ovos e filhotes (ninho → ovo → eclosão) | implementado | lógica em unit; fluxo no jogo não exercitado no e2e |
 
@@ -56,8 +69,8 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
   (ou GitHub → Settings → Applications → Vercel → incluir `dragonbound`). O `vercel.json` já configura o build.
 
 ## Resultados de teste (sessão 1)
-- `npm test`: 34/34.
-- `npm run e2e`: 43/43 (sessão 2: inclui altitude em voo e troca de camadas). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
+- `npm test`: 38/38 (sessão 3).
+- `npm run e2e`: 43/43 (sessão 3; inclui altitude em voo e troca de camadas; a abertura do Tor é pulada no teste). Capturas em `tests/screenshots/` (geradas a cada execução; não versionadas).
 - Desempenho: ~57 fps no Chromium headless com GL por software, 7 entidades. **Isso não representa aparelhos reais**; nenhum dispositivo físico foi medido.
 
 ## Problemas conhecidos
@@ -70,7 +83,8 @@ Testado = coberto por `npm test` (34 testes unitários) e/ou `npm run e2e` (39 v
 7. Zoom de câmera no voo foi desativado (objetos com scrollFactor 0 não acompanham o zoom).
 8. Limite de 30 fps usa `game.loop.setFPSLimit`; não medido em aparelho.
 9. Efeitos do PixelFx foram reduzidos a 66% com vizinho-mais-próximo para casar com a densidade de pixels do jogo; alguns perdem detalhe fino.
-10. Chefes e narrativa não existem ainda.
+10. A narrativa cobre só Vigiamar e o Monte Brasaviva; as outras ilhas ainda não têm história.
+11. Atualização automática validada só no build local (registro e precache); a troca de versão depois de um deploy real na Vercel não foi observada em aparelho.
 
 ## Próximos passos (ordem sugerida)
 1. Testar em iPhone/Android reais e com gamepads; ajustar toque, safe-area e desempenho.

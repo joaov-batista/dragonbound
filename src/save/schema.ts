@@ -11,13 +11,15 @@ export interface SaveData {
   islands: Record<string, IslandState>;
   ocean: { x: number; y: number; atSea: boolean; flying: boolean; discovered: string[]; boatHp: number };
   stats: { relics: number; bonded: number; flights: number; eggs: number };
+  /** Quests, story flags and progression (absent in pre-story saves; created on first use). */
+  story?: import('../story/story').StoryState;
   eggs: { id: string; island: string; x: number; y: number; hatchDay: number; mother: string; father: string }[];
 }
 
 export function newSave(worldSeed: number): SaveData {
   return {
     version: SAVE_VERSION, worldSeed, day: 0.3, playtime: 0, savedAt: Date.now(),
-    player: { island: 'alvamar', x: -1, y: -1, hp: 6, maxHp: 6, items: { berry: 3, fish: 1, meat: 0, herb: 1, shroom: 0, ember: 0, shell: 0, relic: 0 }, selected: 'berry', checkpoint: { island: 'alvamar', x: -1, y: -1 } },
+    player: { island: 'alvamar', x: -1, y: -1, hp: 6, maxHp: 6, items: { berry: 3, fish: 1, meat: 0, herb: 1, shroom: 0, ember: 0, shell: 0, relic: 0, coin: 25 }, selected: 'berry', checkpoint: { island: 'alvamar', x: -1, y: -1 } },
     dragons: {}, companion: null, islands: {},
     ocean: { x: 1500, y: 3140, atSea: false, flying: false, discovered: ['alvamar'], boatHp: 100 },
     stats: { relics: 0, bonded: 0, flights: 0, eggs: 0 }, eggs: [],

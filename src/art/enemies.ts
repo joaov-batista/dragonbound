@@ -2,8 +2,8 @@ import { Pix, ramp, hash2, mix } from './Pix';
 
 const OUT = 0x1a1424;
 export const ENEMY_FRAMES = { move: 4, attack: 3, hurt: 1 } as const;
-export type EnemyKind = 'crab' | 'boar' | 'bat' | 'magma' | 'wasp';
-export const ENEMY_SIZE: Record<EnemyKind, [number, number]> = { crab: [32, 24], boar: [44, 30], bat: [32, 26], magma: [24, 22], wasp: [30, 26] };
+export type EnemyKind = 'crab' | 'boar' | 'bat' | 'magma' | 'wasp' | 'hunter';
+export const ENEMY_SIZE: Record<EnemyKind, [number, number]> = { crab: [32, 24], boar: [44, 30], bat: [32, 26], magma: [24, 22], wasp: [30, 26], hunter: [18, 32] };
 
 type Draw = (p: Pix, anim: keyof typeof ENEMY_FRAMES, i: number) => void;
 
@@ -80,12 +80,12 @@ const wasp: Draw = (p, anim, i) => {
   p.outline(OUT);
 };
 
-const DRAW: Record<EnemyKind, Draw> = { crab, boar, bat, magma, wasp };
+const DRAW: Record<Exclude<EnemyKind, 'hunter'>, Draw> = { crab, boar, bat, magma, wasp };
 
 export function paintEnemyAtlas(): { pix: Pix; frames: Record<string, { x: number; y: number; w: number; h: number }> } {
   const pix = new Pix(8 * 46, 5 * 32);
   const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
-  (Object.keys(DRAW) as EnemyKind[]).forEach((k, row) => {
+  (Object.keys(DRAW) as Exclude<EnemyKind, 'hunter'>[]).forEach((k, row) => {
     const [w, h] = ENEMY_SIZE[k]; let col = 0;
     for (const [anim, n] of Object.entries(ENEMY_FRAMES)) for (let i = 0; i < n; i++, col++) {
       const t = new Pix(w + 2, h + 2), inner = new Pix(w, h);

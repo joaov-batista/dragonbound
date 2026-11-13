@@ -47,6 +47,8 @@ Tudo é remapeável em **Pausa → Controles**. No celular os controles aparecem
 Projeto estático: qualquer host serve a pasta `dist/`. `vercel.json` já configura a Vercel (framework Vite, saída `dist`).
 Na Cloudflare Pages use build `npm run build` e diretório `dist`.
 
+O app instalado se atualiza sozinho: a cada deploy, a versão nova é baixada em segundo plano e o jogo salva e recarrega uma vez. Não é preciso reinstalar.
+
 ## Créditos e licenças
 
 - Motor: [Phaser 4](https://phaser.io) (MIT).

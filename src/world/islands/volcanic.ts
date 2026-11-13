@@ -5,7 +5,9 @@ import type { IslandData } from './types';
 export function buildVolcanic(): IslandData {
   const b = new IslandBuilder('brasaviva', 'volcanic', 340, 112, 72, 2203);
   b.profile([[0, -8], [22, -6], [30, -2], [34, 1], [50, 3], [70, 8], [90, 14], [110, 24], [126, 36], [140, 44], [146, 46], [149, 38], [166, 38], [169, 46], [176, 44], [190, 34],
-    [210, 22], [230, 14], [250, 9], [270, 5], [290, 2], [304, -2], [312, -6], [339, -9]], 0.9).terrain();
+    [210, 22], [230, 14], [248, 9], [252, 7], [294, 7], [300, 2], [306, -2], [312, -6], [339, -9]], 0.9);
+  for (let x = 252; x <= 294; x++) b.heights[x] = 7; // the hunters' forge yard
+  b.terrain();
   // lava: crater lake and two rivers crossing the slopes
   b.pool(149, 168, 42, 'lava');
   b.notch(78, 84, 3).pool(78, 84, b.heights[77] - 1, 'lava').platform(80, b.heights[77] + 2, 3);
@@ -22,11 +24,15 @@ export function buildVolcanic(): IslandData {
   b.spawn((p) => ({ t: 'torch', ...p }), 122, 14).spawn((p) => ({ t: 'torch', ...p }), 134, 14);
   b.prop('statue', 128, { elev: 14 }).prop('pillar', 121, { elev: 14 }).prop('pillar_broken', 136, { elev: 14 });
   b.spawn((p, id) => ({ t: 'chest', ...p, id, loot: 'ember', n: 4 }), 131, 14);
-  for (const [x, e] of [[147, undefined], [128, 20], [262, undefined]] as const) b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'relic', id }), x, e);
-  for (const x of [58, 92, 104, 186, 222, 256, 278]) b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'ember', id }), x);
+  for (const [x, e] of [[147, undefined], [128, 20], [244, undefined]] as const) b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'relic', id }), x, e);
+  for (const x of [58, 92, 104, 186, 222, 232, 298]) b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'ember', id }), x);
   for (const x of [166, 176]) b.spawn((p, id) => ({ t: 'pickup', ...p, item: 'ember', id }), x, 13);
   for (const x of [116, 196]) { b.spawn((p) => ({ t: 'vent', ...p }), x); b.prop('lavavent', x); b.wind(x - 2, b.heights[x] + 30, 5, 30, 0, -230); }
-  for (const x of [72, 100, 220, 248, 270]) b.spawn((p) => ({ t: 'enemy', kind: 'magma', ...p }), x);
+  for (const x of [72, 100, 220]) b.spawn((p) => ({ t: 'enemy', kind: 'magma', ...p }), x);
+  for (const x of [240, 248]) b.spawn((p) => ({ t: 'enemy', kind: 'hunter', ...p }), x);
+  b.prop('banner_hunter', 254).prop('forge', 258).prop('cage', 286).prop('tent', 291).prop('banner_hunter', 294).prop('netpile', 262);
+  b.spawn((p) => ({ t: 'torch', ...p }), 266).spawn((p) => ({ t: 'torch', ...p }), 280);
+  b.spawns.push({ t: 'trigger', flag: 'reached_forge', x0: 244 * 16, x1: 252 * 16 }, { t: 'boss', boss: 'alpha', ...b.at(273), arena: [252, 295] });
   for (const [x, e] of [[110, 15], [150, 14], [190, 16]] as const) b.spawn((p) => ({ t: 'enemy', kind: 'bat', x: p.x, y: b.row(e) * 16 }), x);
   b.habitat('cinzal', 186, 18, 2).habitat('cinzal', 60, 12, 1).habitat('pedrusco', 170, 6, 1, 12);
   b.spawn((p, id) => ({ t: 'nest', ...p, id }), 174);

@@ -11,6 +11,8 @@ import { COL, bar, panel, txt, wrap } from '../ui/kit';
 import { OCEAN_H, OCEAN_W, allSites } from '../world/generation/archipelago';
 import { LANE_NAMES } from '../world/islands/lanes';
 import { Menu } from '../ui/Menu';
+import { Shop } from '../ui/Shop';
+import { NAMES, tracked, type Talk } from '../story/story';
 import { TouchControls } from '../ui/TouchControls';
 
 /** HUD, prompts, toasts, dialogs, touch controls and the pause menu — drawn above every gameplay scene. */
@@ -23,7 +25,11 @@ export class UIScene extends Phaser.Scene {
   private toasts: { c: Phaser.GameObjects.Container; t: number }[] = [];
   private dialog: Phaser.GameObjects.Container | null = null; private title: Phaser.GameObjects.Container | null = null;
   private vignette!: Phaser.GameObjects.Image; private compass!: Phaser.GameObjects.BitmapText;
-  touch!: TouchControls; menu!: Menu;
+  touch!: TouchControls; menu!: Menu; shop!: Shop;
+  private talk: { t: Talk; page: number; sel: number } | null = null; private talkFresh = false; private talkHit: { x: number; y: number; w: number; h: number; fn: () => void }[] = [];
+  private qTitle!: Phaser.GameObjects.BitmapText; private qText!: Phaser.GameObjects.BitmapText; private qIcon!: Phaser.GameObjects.Image;
+  private coinIcon!: Phaser.GameObjects.Image; private coinText!: Phaser.GameObjects.BitmapText;
+  private bossName!: Phaser.GameObjects.BitmapText; private bossBar!: ReturnType<typeof bar>;
   private mm!: Phaser.GameObjects.Container; private mmImg!: Phaser.GameObjects.Image; private mmGfx!: Phaser.GameObjects.Graphics; private mmBg!: Phaser.GameObjects.NineSlice; private mmLabel!: Phaser.GameObjects.BitmapText;
   private laneGfx!: Phaser.GameObjects.Graphics; private laneLabel!: Phaser.GameObjects.BitmapText;
   private mmKind: string | null = null; private mmVer = -1; private mmDisc = -1;
@@ -50,17 +56,22 @@ export class UIScene extends Phaser.Scene {
     this.mm.add([this.mmBg, this.mmImg, this.mmGfx, this.mmLabel, this.laneGfx, this.laneLabel]);
     this.touch = new TouchControls(this);
     this.menu = new Menu(this, this.touch, () => this.toTitle());
+    this.shop = new Shop(this);
+    this.qIcon = this.add.image(12, 76, 'ui', 'scroll').setScale(0.7); this.qTitle = txt(this, 22, 69, '', COL.gold); this.qText = txt(this, 6, 81, '', COL.text);
+    this.coinIcon = this.add.image(64, 34, 'ui', 'coin').setScale(0.7); this.coinText = txt(this, 72, 27, '');
+    this.bossName = txt(this, 0, 0, '', 0xff9070).setOrigin(0.5, 0); this.bossBar = bar(this, null, 0, 0, 180, 0xe4533c);
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       audio.unlock();
       if (p.wasTouch) { this.sawTouch = true; input.lastDevice = 'touch'; }
-      if (hud.dialog && !this.menu.open) { hud.dialog = null; this.showDialog(null); audio.play('uiBack'); return; }
+      if (this.talk && !this.menu.open && !this.shop.open) { for (const h of this.talkHit) if (p.x >= h.x && p.x < h.x + h.w && p.y >= h.y && p.y < h.y + h.h) { h.fn(); return; } this.advanceTalk(); return; }
       if (!this.menu.open && p.x < 60 && p.y > 18 && p.y < 50 && hud.mode === 'ground') { game.cycleItem(1); audio.play('ui'); }
     });
     this.input.keyboard?.on('keydown', () => audio.unlock());
 
     const offs = [
-      events.on('toast', (t) => this.toast(t.text, t.icon)), events.on('dialog', (d) => this.showDialog(d?.text ?? null)), events.on('areaTitle', (t) => this.areaTitle(t.title, t.subtitle)),
+      events.on('toast', (t) => this.toast(t.text, t.icon)), events.on('dialog', (d) => { if (d) this.openTalk({ speaker: '', lines: [d.text] }); else this.closeTalk(); }),
+      events.on('talk', (t) => this.openTalk(t)), events.on('openShop', (o) => this.shop.show(o.who)), events.on('areaTitle', (t) => this.areaTitle(t.title, t.subtitle)),
       events.on('hudDirty', () => { this.dirty = true; }), events.on('openMenu', (o) => this.menu.show(o?.tab)), events.on('closeMenu', () => this.menu.hide()),
     ];
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => offs.forEach((f) => f()));
@@ -89,12 +100,37 @@ export class UIScene extends Phaser.Scene {
     if (this.toasts.length > 4) this.toasts.shift()!.c.destroy();
   }
 
-  private showDialog(text: string | null): void {
-    this.dialog?.destroy(); this.dialog = null; hud.dialog = text;
-    if (!text) return;
-    const W = this.scale.width, H = this.scale.height, w = Math.min(380, W - 24), t = txt(this, 10, 6, wrap(this, text, w - 20));
-    const h = t.height + 26, c = this.add.container(Math.round((W - w) / 2), H - h - (this.touch.visible ? 96 : 14)).setDepth(750);
-    c.add([panel(this, 0, 0, w, h, 'panel'), t, txt(this, w - 8, h - 17, input.lastDevice === 'touch' ? 'toque para continuar' : `${this.label('interact')}continuar`, COL.gold).setOrigin(1, 0)]);
+  /** Conversation box: speaker name, pages of text, optional choices (and a market button for shopkeepers). */
+  private openTalk(t: Talk): void {
+    const choices = [...(t.choices ?? [])];
+    if (t.shop) { const who = Object.entries(NAMES).find(([, n]) => n === t.speaker)?.[0]; if (who) choices.unshift({ label: 'Ver mercadorias', run: () => events.emit('openShop', { who }) }, { label: 'Até mais', run: () => undefined }); }
+    this.talk = { t: { ...t, choices: choices.length ? choices : undefined }, page: 0, sel: 0 }; this.talkFresh = true;
+    audio.play('ui'); this.drawTalk();
+  }
+  private closeTalk(): void { this.talk = null; hud.dialog = null; this.dialog?.destroy(); this.dialog = null; this.talkHit = []; }
+  private advanceTalk(): void {
+    const k = this.talk; if (!k) return;
+    const last = k.page >= k.t.lines.length - 1;
+    if (!last) { k.page++; audio.play('ui', 0.5); this.drawTalk(); return; }
+    if (k.t.choices) { const c = k.t.choices[k.sel]; this.closeTalk(); audio.play('ui'); c.run(); return; }
+    this.closeTalk(); audio.play('uiBack');
+  }
+  private drawTalk(): void {
+    this.dialog?.destroy(); this.dialog = null; this.talkHit = [];
+    const k = this.talk; if (!k) { hud.dialog = null; return; }
+    const text = k.t.lines[k.page]; hud.dialog = text;
+    const W = this.scale.width, H = this.scale.height, w = Math.min(380, W - 24), t = txt(this, 10, k.t.speaker ? 17 : 6, wrap(this, text, w - 20));
+    const last = k.page >= k.t.lines.length - 1, ch = last ? k.t.choices ?? [] : [];
+    const h = t.height + (k.t.speaker ? 30 : 22) + ch.length * 16, x0 = Math.round((W - w) / 2), y0 = H - h - (this.touch.visible ? 96 : 14);
+    const c = this.add.container(x0, y0).setDepth(750);
+    c.add([panel(this, 0, 0, w, h, 'panel'), t]);
+    if (k.t.speaker) c.add(txt(this, 10, 3, k.t.speaker, COL.gold));
+    ch.forEach((o, i) => {
+      const cy = t.y + t.height + 2 + i * 16, on = i === k.sel;
+      c.add(this.add.rectangle(8, cy, w - 16, 15, on ? 0xb8552e : 0x2c3554, 0.9).setOrigin(0)); c.add(txt(this, 14, cy, (on ? '> ' : '  ') + o.label, on ? 0xffffff : COL.text));
+      this.talkHit.push({ x: x0 + 8, y: y0 + cy, w: w - 16, h: 15, fn: () => { if (this.talk) { this.talk.sel = i; this.advanceTalk(); } } });
+    });
+    if (!ch.length) c.add(txt(this, w - 8, h - 15, input.lastDevice === 'touch' ? 'toque' : `${this.label('interact')}${last ? 'fechar' : 'continuar'}`, COL.gold).setOrigin(1, 0));
     this.dialog = c;
   }
 
@@ -170,7 +206,15 @@ export class UIScene extends Phaser.Scene {
     const dt = delta / 1000, W = this.scale.width, H = this.scale.height, p = game.save.player;
     const inGame = hud.mode !== 'title';
     if (hud.mode === 'title') input.update(); // gameplay scenes poll input themselves
-    this.menu.update(dt);
+    this.menu.update(dt); this.shop.update();
+    if (this.talkFresh) this.talkFresh = false; // the press that opened the conversation must not also advance it
+    else if (this.talk && !this.menu.open && !this.shop.open) {
+      const ch = this.talk.page >= this.talk.t.lines.length - 1 ? this.talk.t.choices : undefined;
+      if (ch && input.pressed('down')) { this.talk.sel = (this.talk.sel + 1) % ch.length; this.drawTalk(); }
+      if (ch && input.pressed('up')) { this.talk.sel = (this.talk.sel + ch.length - 1) % ch.length; this.drawTalk(); }
+      if (input.pressed('interact') || input.pressed('jump') || input.pressed('attack')) this.advanceTalk();
+      else if (input.pressed('pause') || input.pressed('dash')) { this.closeTalk(); audio.play('uiBack'); }
+    }
     // touch overlay visibility
     const wantTouch = settings.touchEnabled === 'on' || (settings.touchEnabled === 'auto' && this.sawTouch && input.lastDevice === 'touch');
     if (wantTouch !== this.touch.visible) this.touch.setVisible(wantTouch && (inGame || this.touch.editing));
@@ -212,6 +256,13 @@ export class UIScene extends Phaser.Scene {
     for (const t of this.toasts) { t.c.setVisible(!this.menu.open).setPosition(Math.round(W / 2 - (t.c.getData('w') as number) / 2 + 5), ty).setAlpha(Math.min(1, t.t * 2)); ty += t.c.getData('h') as number; }
     this.fps.setVisible(settings.showFps).setText(settings.showFps ? `${Math.round(hud.fps)} fps · ${hud.entities} ent · ${hud.fxCount} fx` : '').setPosition(4, H - 14);
     this.drawMinimap(showHud, W);
+    const tq = showHud && !hud.dialog ? tracked() : null;
+    this.qIcon.setVisible(!!tq); this.qTitle.setVisible(!!tq); this.qText.setVisible(!!tq);
+    if (tq) { const y0 = ground ? 66 : 44; this.qIcon.setY(y0 + 7); this.qTitle.setText(tq.def.title).setY(y0); this.qText.setText(wrap(this, tq.stage.text, Math.min(170, W * 0.38))).setY(y0 + 12); }
+    this.coinIcon.setVisible(ground); this.coinText.setVisible(ground).setText(`${p.items.coin ?? 0}`);
+    const bs = showHud ? hud.boss : null;
+    this.bossName.setVisible(!!bs); this.bossBar.objs.forEach((o) => (o as Phaser.GameObjects.Rectangle).setVisible(!!bs));
+    if (bs) { const by = H - (this.touch.visible ? 150 : 46); this.bossName.setText(bs.name).setPosition(Math.round(W / 2), by - 14); this.bossBar.objs.forEach((o, i) => (o as Phaser.GameObjects.Rectangle).setPosition(W / 2 - 90 + (i ? 1 : 0), by + (i ? 1 : 0))); this.bossBar.set(bs.hp / bs.max); }
     this.compass.setVisible(showHud && !!hud.compass);
     if (hud.compass) this.compass.setText(hud.compass.label).setPosition(Math.round(W / 2), 6 + (r ? 44 : 0));
   }

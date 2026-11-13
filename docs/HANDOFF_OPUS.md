@@ -87,7 +87,7 @@ Cavaleiro: `placeRider` (Flight.ts) põe o quadril do herói em `Dragon.saddle`,
 `InputManager` expõe `down/pressed/released(ação)` e `axisX/axisY`. Fontes: teclado (`event.code`), Gamepad API (botões/eixos com zona morta e sensibilidade), toque (`setVirtual`, `setVirtualAxis`). Toques e teclas mais curtos que um quadro são retidos. Bindings em `localStorage`. Remapeamento em `ui/Menu.ts` (aba Controles). `TouchControls` tem layout por modo (ground/flight/boat/oceanFlight), editor de arrastar, escala, opacidade e safe-area.
 
 ## 15. PWA
-`vite.config.ts`: manifest (fullscreen, landscape, ícones), Workbox precache de todo o `dist`, `registerType: 'prompt'` com botão de atualização em `index.html`. Saves: IndexedDB `dragonbound/saves/slot1` (fallback localStorage). `SAVE_VERSION` em `core/constants.ts`; migrações em `save/schema.ts`.
+`vite.config.ts`: manifest (fullscreen, landscape, ícones), Workbox precache de todo o `dist`, `registerType: 'autoUpdate'` (skipWaiting + clientsClaim; `main.ts` confere a cada 20 min e ao voltar para a aba, salva e recarrega quando um worker novo assume). Saves: IndexedDB `dragonbound/saves/slot1` (fallback localStorage). `SAVE_VERSION` em `core/constants.ts`; migrações em `save/schema.ts`.
 
 ## 16. Executar e testar
 `npm ci && npm run dev` · `npm run build` · `npm test` · `npm run e2e` (sobe `vite preview` na porta 4188, usa hooks `?debug=1`). Capturas do e2e: `tests/screenshots/`.

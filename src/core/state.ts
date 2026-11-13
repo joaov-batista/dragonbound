@@ -8,7 +8,7 @@ import type { IslandData, ItemId } from '../world/islands/types';
 import { DAY_LENGTH } from './constants';
 import { events } from './events';
 
-export const ITEM_NAMES: Record<ItemId, string> = { berry: 'Frutas silvestres', fish: 'Peixe', meat: 'Carne', herb: 'Erva curativa', shroom: 'Cogumelo-luz', ember: 'Cristal de brasa', shell: 'Concha brilhante', relic: 'Fragmento antigo' };
+export const ITEM_NAMES: Record<ItemId, string> = { berry: 'Frutas silvestres', fish: 'Peixe', meat: 'Carne', herb: 'Erva curativa', shroom: 'Cogumelo-luz', ember: 'Cristal de brasa', shell: 'Concha brilhante', relic: 'Fragmento antigo', coin: 'Moedas' };
 export const FOOD_ITEMS: ItemId[] = ['berry', 'fish', 'meat', 'herb', 'shroom', 'ember'];
 export const USABLE: ItemId[] = ['berry', 'fish', 'meat', 'herb', 'shroom', 'ember', 'shell'];
 

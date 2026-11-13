@@ -6,7 +6,7 @@ type F = Record<string, { x: number; y: number; w: number; h: number }>;
 /** 16x16 icons: items, emotes, HUD glyphs. */
 export const ICONS = ['berry', 'fish', 'meat', 'herb', 'shroom', 'ember', 'shell', 'relic', 'heart', 'heart_empty', 'trust', 'fear', 'hunger', 'energy',
   'e_alert', 'e_question', 'e_heart', 'e_sleep', 'e_anger', 'e_fear', 'e_happy', 'e_hungry', 'e_hurt', 'e_note',
-  'el_fire', 'el_water', 'el_nature', 'el_storm', 'el_earth', 'el_ice', 'wing', 'boat', 'lock', 'star', 'paw', 'stamina'] as const;
+  'el_fire', 'el_water', 'el_nature', 'el_storm', 'el_earth', 'el_ice', 'wing', 'boat', 'lock', 'star', 'paw', 'stamina', 'coin', 'scroll', 'skull', 'sword'] as const;
 export type IconId = (typeof ICONS)[number];
 
 function bubble(p: Pix): void { p.ball(8, 7, 7, 6, ramp(0xf4f0e6)); p.poly([[5, 11], [4, 15], [9, 12]], 0xf4f0e6); }
@@ -53,6 +53,10 @@ function icon(id: IconId, p: Pix): void {
     case 'boat': { const w = ramp(0x9a6238); p.poly([[1, 10], [15, 10], [12, 14], [3, 14]], w[2]); p.rect(7, 1, 1, 9, w[1]); p.poly([[8, 2], [13, 8], [8, 9]], 0xf0e6d0); p.outline(OUT); break; }
     case 'lock': { const r = ramp(0x8a8a9a); p.rect(3, 7, 10, 8, r[2]); p.rect(3, 7, 10, 1, r[4]); p.ball(8, 6, 3.5, 4, r); p.ball(8, 6, 1.6, 2, [0, 0, 0, 0, 0]); for (let y = 2; y < 8; y++) for (let x = 7; x < 10; x++) p.erase(x, y); p.rect(3, 7, 10, 8, r[2]); p.rect(7, 10, 2, 3, OUT); p.outline(OUT); break; }
     case 'star': { const pts: [number, number][] = []; for (let k = 0; k < 10; k++) { const a = (k / 10) * 6.283 - 1.571, r = k % 2 ? 3 : 7; pts.push([8 + Math.cos(a) * r, 8 + Math.sin(a) * r]); } p.poly(pts, 0xf0d040); p.px(7, 6, 0xffffff); p.outline(OUT); break; }
+    case 'coin': { const r = ramp(0xe0b040); p.ball(8, 8, 6, 6, r); p.ball(8, 8, 4, 4, ramp(r[3])); p.line(7, 5, 7, 11, r[1]); p.px(6, 5, 0xffffff); p.outline(OUT); break; }
+    case 'scroll': { const r = ramp(0xe8d8a8); p.rect(3, 3, 10, 10, r[2]); p.ball(3, 8, 2, 5, r); p.ball(13, 8, 2, 5, ramp(r[1])); for (let y = 5; y < 12; y += 2) p.line(5, y, 11, y, r[0]); p.px(8, 12, 0xc8463a); p.outline(OUT); break; }
+    case 'skull': { const r = ramp(0xe8e0d0); p.ball(8, 7, 6, 5.5, r); p.rect(5, 11, 6, 3, r[2]); p.rect(5, 6, 2, 2, OUT); p.rect(9, 6, 2, 2, OUT); p.px(8, 10, OUT); p.outline(OUT); break; }
+    case 'sword': { p.line(3, 13, 12, 4, 0xd8e6dc); p.line(4, 13, 13, 4, 0xa8b6ac); p.line(2, 10, 6, 14, 0xf2c14e); p.line(1, 14, 3, 12, 0x7c4a2e); p.outline(OUT); break; }
     case 'paw': { const r = ramp(0x4fd6c0); p.ball(8, 10, 4, 3.5, r); for (const [x, y] of [[3, 6], [6, 3], [10, 3], [13, 6]] as const) p.ball(x, y, 1.7, 2, r); p.outline(OUT); break; }
   }
 }

@@ -22,7 +22,6 @@
   #boot small { display: block; letter-spacing: .1em; opacity: .6; margin-top: .8em; }
   #rotate { display: none; position: fixed; left: 0; right: 0; bottom: 0; padding: .6em 1em calc(.6em + env(safe-area-inset-bottom)); background: #b8552e; text-align: center; z-index: 5; }
   @media (orientation: portrait) and (max-width: 700px) { #rotate { display: block; } }
-  #update { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 6; padding: .5em 1em; border: 2px solid #f2c14e; background: #1d2238; color: #f4f0e6; font: inherit; }
 </style>
 </head>
 <body>
@@ -30,7 +29,6 @@
 <div id="safe-probe"></div>
 <div id="boot"><div>DRAGONBOUND<small>versão beta · carregando…</small></div></div>
 <div id="rotate">Gire o aparelho: Dragonbound foi feito para a horizontal.</div>
-<button id="update" hidden>Nova versão disponível — toque para atualizar</button>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

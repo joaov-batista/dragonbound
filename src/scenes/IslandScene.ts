@@ -11,7 +11,10 @@ import { Dragon } from '../dragons/Dragon';
 import { ceilingY, updateRide } from '../dragons/Flight';
 import type { Element, FoodId } from '../dragons/genetics/types';
 import { DragonTextures } from '../dragons/rendering/DragonTextures';
-import { Enemy } from '../entities/Enemy';
+import { Enemy, type EnemyLike } from '../entities/Enemy';
+import { AlphaBoss, BrutoBoss, type BossHooks } from '../entities/Boss';
+import { Npc } from '../entities/Npc';
+import { flag, setFlag, updateQuests } from '../story/story';
 import { buildInteractables, type Interactable } from '../entities/Interactables';
 import { input } from '../input/InputManager';
 import { rectsOverlap, type Rect } from '../physics/Body';
@@ -36,7 +39,7 @@ export interface IslandEntry { islandId: string; entry: 'load' | 'dock' | 'air-w
  */
 interface Lane {
   depth: number; data: IslandData; world: World; view: IslandView; vfx: VfxManager; shots: Projectiles;
-  dragons: Dragon[]; enemies: Enemy[]; things: Interactable[];
+  dragons: Dragon[]; enemies: EnemyLike[]; things: Interactable[]; npcs: Npc[]; triggers: { flag: string; x0: number; x1: number }[];
   cam: Phaser.Cameras.Scene2D.Camera; haze: Phaser.GameObjects.Rectangle; cm: Phaser.Filters.ColorMatrix;
 }
 
@@ -47,8 +50,8 @@ export class IslandScene extends Phaser.Scene {
   get grid(): TileGrid { return this.lane.data.grid; }
   get vfx(): VfxManager { return this.lane.vfx; }
   get dragons(): Dragon[] { return this.lane.dragons; }
-  get enemies(): Enemy[] { return this.lane.enemies; }
-  set enemies(v: Enemy[]) { this.lane.enemies = v; }
+  get enemies(): EnemyLike[] { return this.lane.enemies; }
+  set enemies(v: EnemyLike[]) { this.lane.enemies = v; }
   get things(): Interactable[] { return this.lane.things; }
   private get shots(): Projectiles { return this.lane.shots; }
   private backdrop!: Backdrop; private weather!: WeatherFx;
@@ -58,7 +61,7 @@ export class IslandScene extends Phaser.Scene {
   private entry!: IslandEntry; private stop = 0; private mount: Dragon | null = null; private focus: Dragon | null = null;
   private buildQueue: Dragon[] = []; private promptT = 0; private saveT = 45; private hatchT = 2; private foodT = 0; private leaving = false;
   private foodCache = new Map<Dragon, { x: number; y: number; thing: Interactable } | null>();
-  private comboMark = new Map<Enemy, number>(); private lookX = 0; private fallT = 0; private caveK = 0; private camY = 0;
+  private comboMark = new Map<EnemyLike, number>(); private questT = 0; private arenaLock: { lane: Lane; cells: [number, number][]; imgs: Phaser.GameObjects.Image[] } | null = null; private lookX = 0; private fallT = 0; private caveK = 0; private camY = 0;
 
   constructor() { super('Island'); }
   init(data: IslandEntry): void { this.entry = data; }
@@ -87,7 +90,7 @@ export class IslandScene extends Phaser.Scene {
     laneDefs.forEach(({ depth, data }, i) => {
       const cam = laneCams[i];
       this.tagCam = cam;
-      const lane = { depth, data, cam, dragons: [], enemies: [], things: [] } as unknown as Lane;
+      const lane = { depth, data, cam, dragons: [], enemies: [], things: [], npcs: [], triggers: [] } as unknown as Lane;
       lane.world = this.makeWorld(lane);
       lane.cm = cam.filters.internal.addColorMatrix(); // per-lane grade: desaturated distance, dark foreground silhouette
       lane.vfx = new VfxManager(this, (o) => this.tagTo(o, cam));
@@ -96,7 +99,15 @@ export class IslandScene extends Phaser.Scene {
       lane.shots = new Projectiles(lane.world);
       lane.haze = this.add.rectangle(-W0 * 3, -H0 * 3, W0 * 7, H0 * 7, 0xc8dcf0, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH.tint - 1);
       lane.things = buildInteractables({ world: lane.world, view: lane.view, sail: () => this.sail(), rest: (x, y) => this.rest(x, y), nest: (x, y) => this.useNest(x, y) }, data.spawns);
-      for (const s of data.spawns) if (s.t === 'enemy') lane.enemies.push(new Enemy(lane.world, s.kind, s.x, s.y));
+      for (const s of data.spawns) {
+        if (s.t === 'enemy') lane.enemies.push(new Enemy(lane.world, s.kind, s.x, s.y));
+        else if (s.t === 'npc') { const n = new Npc(lane.world, s.who, s.x, s.y, s.range); lane.npcs.push(n); lane.things.push(n.interactable); }
+        else if (s.t === 'trigger') lane.triggers.push(s);
+        else if (s.t === 'boss' && !flag('boss_' + s.boss)) {
+          if (s.boss === 'bruto') lane.enemies.push(new BrutoBoss(lane.world, s.x, s.y, s.arena, this.bossHooks(lane)));
+          else { const a = new AlphaBoss(lane.world, s.x, s.y, s.arena, this.bossHooks(lane)); lane.enemies.push(a, ...a.anchors); }
+        }
+      }
       this.lanes.push(lane);
     });
     const byDepth = (d: number | undefined): Lane => this.lanes.find((l) => l.depth === (d ?? 0)) ?? this.lanes.find((l) => l.depth === 0)!;
@@ -147,8 +158,49 @@ export class IslandScene extends Phaser.Scene {
     hud.mode = this.mount ? 'flight' : 'ground'; hud.prompt = null; hud.dialog = null;
     this.paintMinimaps();
     this.applyAmbience(0);
+    if (this.island.id === 'alvamar' && !flag('intro')) {
+      setFlag('intro');
+      this.time.delayedCall(1600, () => events.emit('talk', { speaker: 'Velho Tor', lines: ['Ah, acordou! Te tirei do mar ontem, agarrado num pedaço de mastro.', 'Isto aqui é Vigiamar. Gente boa, dragões por perto… e caçadores rondando.', 'A Chefe Ragna quer te ver. O Salão fica no alto da praça, à direita.'] }));
+    }
     if (DEBUG) (window as unknown as Record<string, unknown>).__scene = this;
   }
+
+  private bossHooks(lane: Lane): BossHooks {
+    return {
+      lock: (x0, x1) => {
+        const g = lane.data.grid, cells: [number, number][] = [], imgs: Phaser.GameObjects.Image[] = [];
+        const prev = this.tagCam; this.tagCam = lane.cam;
+        for (const px of [x0, x1]) {
+          const tx = Math.floor(px / TILE), top = (g.groundBelow(px, 0, g.h) ?? lane.data.seaRow * TILE) / TILE;
+          for (let ty = top - 9; ty < top; ty++) if (g.inb(tx, ty) && g.cells[ty * g.w + tx] !== Cell.Solid) { cells.push([tx, ty]); g.cells[ty * g.w + tx] = Cell.Solid; }
+          for (let k = 0; k < 3; k++) imgs.push(this.add.image(tx * TILE + 8, top * TILE - k * 38, 'props', 'palisade').setOrigin(0.5, 1).setDepth(DEPTH.entities + 4));
+        }
+        this.tagCam = prev;
+        this.arenaLock = { lane, cells, imgs }; this.arenaLockX = (x0 + x1) / 2;
+        audio.setMusic('tense');
+      },
+      unlock: () => { const a = this.arenaLock; if (!a) return; for (const [tx, ty] of a.cells) a.lane.data.grid.cells[ty * a.lane.data.grid.w + tx] = Cell.Empty; for (const i of a.imgs) i.destroy(); this.arenaLock = null; },
+      adds: (kind, n, x) => { const prev = this.tagCam; this.tagCam = lane.cam; for (let i = 0; i < n; i++) { const ex = x + (i % 2 ? 1 : -1) * (60 + i * 20), gy = lane.data.grid.groundBelow(ex, 0, lane.data.grid.h) ?? lane.data.seaRow * TILE; const e = new Enemy(lane.world, kind, ex, gy - 2); e.aggro = true; lane.enemies.push(e); lane.vfx.play('poof', ex, gy, {}); } this.tagCam = prev; },
+      intro: (id) => {
+        if (id === 'bruto') events.emit('talk', { speaker: 'Bruto Garra-de-Ferro', lines: ['Hah! O ladrãozinho de dragões da vila!', 'A Capitã Varga paga bem por escamas. E por quem atrapalha também!'] });
+        else events.emit('talk', { speaker: '', lines: ['Um dragão-alfa, gigante, preso por quatro correntes de ferro.', 'Quebre as âncoras. Fique perto delas quando ele cuspir fogo; pule as ondas de choque.'] });
+      },
+      defeated: (id) => {
+        setFlag('boss_' + id); audio.setMusic('calm'); audio.play('bond');
+        if (id === 'bruto') { game.addItem('coin', 100); events.emit('talk', { speaker: 'Bruto Garra-de-Ferro', lines: ['Argh… chega, chega!', 'Você acha que me venceu? A Capitã Varga tem um gigante acorrentado na forja do Monte Brasaviva.', 'Quando as armas de escama ficarem prontas… nenhuma vila vai resistir.'] }); events.emit('toast', { text: '+100 moedas', icon: 'coin' }); }
+        else {
+          const prev = this.tagCam; this.tagCam = lane.cam;
+          const bx = (this.arenaLockX ?? this.player.body.x) + 70, gy = lane.data.grid.groundBelow(bx, 0, lane.data.grid.h) ?? this.player.body.y;
+          const v = this.add.sprite(bx, gy + 1, 'people', 'varga_idle_0').setOrigin(22 / 48, 44 / 48).setFlipX(true).setDepth(DEPTH.entities + 2).play('pp-varga-idle');
+          this.tagCam = prev; lane.vfx.play('poof', bx, gy, {});
+          events.emit('talk', { speaker: 'Capitã Varga Ferro-Rubro', lines: ['Você soltou meu gigante. Que comovente.', 'Aproveite a vitória, Vinculado. Os Caçadores de Escama têm muitos navios…', '…e eu tenho paciência. Até a próxima maré.'] });
+          this.time.delayedCall(2500, () => { lane.vfx.play('poof', v.x, v.y, { scale: 1.4 }); v.destroy(); });
+          game.addItem('coin', 120); events.emit('toast', { text: 'O Gigante está livre! +120 moedas', icon: 'star' });
+        }
+      },
+    };
+  }
+  private arenaLockX: number | null = null;
 
   /** Render `go` with one camera only (all other cameras of this scene ignore it). */
   private tagTo(go: Phaser.GameObjects.GameObject, cam: Phaser.Cameras.Scene2D.Camera): void { (go as unknown as { cameraFilter: number }).cameraFilter = this.camAll & ~cam.id; }
@@ -311,15 +363,17 @@ export class IslandScene extends Phaser.Scene {
   private hitIds = new Map<Dragon, number>();
   private hitOnce(d: Dragon): boolean { if (this.hitIds.get(d) === this.player.attackId) return false; this.hitIds.set(d, this.player.attackId); return true; }
 
-  private damagePlayer(dmg: number, fromX: number, by?: Enemy): boolean {
+  private damagePlayer(dmg: number, fromX: number, by?: EnemyLike): boolean {
     const pl = this.player;
     if (pl.parrying && by) { pl.hurt(dmg, fromX); by.stagger(); events.emit('toast', { text: 'Aparou!' }); return false; }
     const hit = pl.hurt(dmg, fromX);
     if (hit && this.mount && pl.hp > 0) { this.mount.vocalize('roar', pl.body.x); }
     return hit;
   }
-  private onEnemyDead(e: Enemy): void {
-    if (e.drop && Math.random() < 0.7) { game.addItem(e.drop); events.emit('toast', { text: `+1 ${ITEM_NAMES[e.drop]}`, icon: e.drop }); }
+  private onEnemyDead(e: EnemyLike): void {
+    if (e.kind === 'bruto' || e.kind === 'anchor' || e.kind === 'alpha') return;
+    if (e.drop === 'coin') { const n = 3 + Math.floor(Math.random() * 4); game.addItem('coin', n); events.emit('toast', { text: `+${n} moedas`, icon: 'coin' }); }
+    else if (e.drop && Math.random() < 0.7) { game.addItem(e.drop); events.emit('toast', { text: `+1 ${ITEM_NAMES[e.drop]}`, icon: e.drop }); }
     this.hitstop(0.07);
   }
 
@@ -369,8 +423,8 @@ export class IslandScene extends Phaser.Scene {
   private commandAttack(): void {
     const comp = this.dragons.find((d) => d.rec === game.companion && !d.ridden && d.ready);
     if (!comp) return;
-    let tgt: Enemy | null = null, bd = 240;
-    for (const e of this.enemies) if (e.alive) { const d = Math.hypot(e.body.x - this.player.body.x, e.body.y - this.player.body.y); if (d < bd) { bd = d; tgt = e; } }
+    let tgt: EnemyLike | null = null, bd = 240;
+    for (const e of this.enemies) if (e.alive && e.kind !== 'anchor') { const d = Math.hypot(e.body.x - this.player.body.x, e.body.y - this.player.body.y); if (d < bd) { bd = d; tgt = e; } }
     if (!tgt) { events.emit('toast', { text: 'Nenhum alvo por perto.' }); return; }
     if (comp.mind.bond.obeys('attack', Math.random())) { tgt.aggro = true; comp.mind.provoke(1.2); comp.mind.force('protect', 0.6); comp.vocalize('roar', comp.body.x); this.vfx.play('exclaim', tgt.body.x, tgt.body.y - 20, { scale: 0.6 }); }
     else { events.emit('toast', { text: `${comp.rec.name} hesita.` }); audio.play('deny'); }
@@ -451,7 +505,7 @@ export class IslandScene extends Phaser.Scene {
     input.update();
     audio.update(dt, game.daylight);
     if (hud.inMenu || this.leaving) { this.renderOnly(time, dt); return; }
-    if (hud.dialog) { if (input.pressed('interact') || input.pressed('jump') || input.pressed('attack') || input.pressed('pause')) { hud.dialog = null; events.emit('dialog', null); audio.play('uiBack'); } this.renderOnly(time, dt); return; }
+    if (hud.dialog) { this.renderOnly(time, dt); return; }
     if (input.pressed('pause')) { events.emit('openMenu', undefined); return; }
     if (input.pressed('map')) { events.emit('openMenu', { tab: 'map' }); return; }
     if (this.stop > 0) { this.stop -= dt; this.vfx.update(); this.syncLaneCams(dt); return; }
@@ -492,8 +546,9 @@ export class IslandScene extends Phaser.Scene {
     // enemies
     for (const e of this.enemies) {
       const r = e.update(dt, pb.x, pb.y, pl.alive);
-      if (r.contact) this.damagePlayer(1, e.body.x, e);
-      if (r.shoot) { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y, vx: ((pb.x - c.x) / d) * 150, vy: ((pb.y - 12 - c.y) / d) * 150, dmg: 1, element: 'storm', friendly: false, fx: 'sparkarc', life: 1.6, scale: 0.35 }); audio.play('zap', 0.5); }
+      if (r.contact) this.damagePlayer(e.contactDmg ?? 1, e.body.x, e);
+      if (r.shoot && e.kind === 'hunter') { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y - 4, vx: ((pb.x - c.x) / d) * 220, vy: ((pb.y - 12 - c.y) / d) * 220, dmg: 1, element: 'physical', friendly: false, fx: 'icelance', life: 1.4, scale: 0.35 }); audio.play('dash', 0.4); }
+      else if (r.shoot) { const c = e.center, d = Math.hypot(pb.x - c.x, pb.y - 12 - c.y) || 1; this.shots.spawn({ x: c.x, y: c.y, vx: ((pb.x - c.x) / d) * 150, vy: ((pb.y - 12 - c.y) / d) * 150, dmg: 1, element: 'storm', friendly: false, fx: 'sparkarc', life: 1.6, scale: 0.35 }); audio.play('zap', 0.5); }
     }
     if (this.enemies.some((e) => !e.alive)) this.enemies = this.enemies.filter((e) => e.alive);
     if ((this.laneCheckT -= dt) <= 0) {
@@ -508,6 +563,13 @@ export class IslandScene extends Phaser.Scene {
       return this.strike(rect, p.dmg, p.element, p.friendly, x - Math.sign(p.vx), p.friendly ? 'dragon' : 'enemy', p.owner) > 0;
     });
 
+    for (const l of this.lanes) { this.tagCam = l.cam; for (const n of l.npcs) n.update(dt, pb.x, pb.y, l === this.lane); }
+    this.tagCam = this.lane.cam;
+    if ((this.questT -= dt) <= 0) {
+      this.questT = 0.4;
+      for (const t of this.lane.triggers) if (pb.x >= t.x0 && pb.x <= t.x1 && !flag(t.flag)) setFlag(t.flag);
+      updateQuests((text, icon) => events.emit('toast', { text, icon }));
+    }
     this.updateDragons(dt);
     // the other lanes keep living (their dragons roam, sleep and eat) but do not notice the player
     for (const l of this.lanes) if (l !== this.lane) {
@@ -631,7 +693,7 @@ export class IslandScene extends Phaser.Scene {
     if (input.pressed('interact') && !this.mount && !pl.busy) {
       if (f && f.intent?.state === 'bonding') return;
       if (best) { best.use(); return; }
-      if (f && fdist < 46 && !f.rec.trapped) { pl.setPose('pet', 0.7); pl.facing = Math.sign(f.body.x - pb.x) || 1; const ev = f.mind.bond.pet(game.day); if (ev?.kind === 'pet') { f.mind.force('approach', 0.8); f.vocalize('purr', pb.x); audio.play('ui'); } else if (ev) { f.mind.force('startled', 0.4); } }
+      if (f && fdist < 46 && !f.rec.trapped) { pl.setPose('pet', 0.7); pl.facing = Math.sign(f.body.x - pb.x) || 1; const ev = f.mind.bond.pet(game.day); if (ev?.kind === 'pet') { if (f.rec.bonded) setFlag('pets', flag('pets') + 1); f.mind.force('approach', 0.8); f.vocalize('purr', pb.x); audio.play('ui'); } else if (ev) { f.mind.force('startled', 0.4); } }
     }
   }
 
@@ -669,9 +731,11 @@ export class IslandScene extends Phaser.Scene {
 
   private updateCamera(dt: number): void {
     const cam = this.lane.cam, b = this.mount ? this.mount.body : this.player.body, W = this.scale.width;
-    const ahead = this.mount?.air ? Phaser.Math.Clamp(b.vx * 0.42, -110, 110) : this.player.facing * 22;
+    // during a boss fight frame both the player and the boss
+    const boss = this.lane.enemies.map((e) => (e as { focus?: { x: number; y: number } | null }).focus).find((f) => f);
+    const ahead = boss ? Phaser.Math.Clamp((boss.x - b.x) * 0.45, -150, 150) : this.mount?.air ? Phaser.Math.Clamp(b.vx * 0.42, -110, 110) : this.player.facing * 22;
     this.lookX += (ahead - this.lookX) * Math.min(1, dt * 2.5);
-    const ty = b.y - (this.mount?.air ? 30 + Phaser.Math.Clamp(-b.vy * 0.15, -40, 40) : 46);
+    const ty = boss ? Math.min(b.y - 46, (b.y + boss.y) / 2 - 10) : b.y - (this.mount?.air ? 30 + Phaser.Math.Clamp(-b.vy * 0.15, -40, 40) : 46);
     this.camY += (ty - this.camY) * Math.min(1, dt * (this.mount ? 5 : b.onGround ? 6 : 3.5));
     if (Math.abs(ty - this.camY) > 70) this.camY = ty - Math.sign(ty - this.camY) * 70;
     cam.scrollX += (b.x + this.lookX - W / 2 - cam.scrollX) * Math.min(1, dt * 8);
